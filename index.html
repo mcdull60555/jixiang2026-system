@@ -1069,7 +1069,7 @@ function saveStudent() {
             name: name,
             className: className,
             pwd: pwd,
-            avatar: Math.random() > 0.5 ? "👦" : "👧"
+            avatar: ["🐻", "🐧", "🦔", "🐳", "🦊"][Math.floor(Math.random() * 5)]
         });
     }
 
