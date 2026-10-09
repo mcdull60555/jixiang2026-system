@@ -9,6 +9,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#4f46e5">
     <title>基翔小學通 - 雲端線上版</title>
+    <!-- 分頁小圖示：和左上角一樣（藍紫底、白框、雲朵） -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%234f46e5'/><rect x='9' y='9' width='46' height='46' rx='11' fill='white'/><g transform='translate(14.5 19.5) scale(0.0578)'><path fill='%236366f1' d='M0 336c0 79.5 64.5 144 144 144h368c70.7 0 128-57.3 128-128 0-61.9-44-113.6-102.4-125.4 4.1-10.7 6.4-22.4 6.4-34.6 0-53-43-96-96-96-19.7 0-38.1 6-53.3 16.2C367 64.2 315.3 32 256 32c-88.4 0-160 71.6-160 160 0 2.7.1 5.4.2 8.1C40.2 219.8 0 273.2 0 336z'/></g></svg>">
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -24,6 +26,9 @@
             background-color: #f8fafc;
             -webkit-tap-highlight-color: transparent;
         }
+        @keyframes marquee-scroll { from { transform: translateX(100%); } to { transform: translateX(-100%); } }
+        .marquee-track { display: inline-block; white-space: nowrap; padding-left: 0; animation: marquee-scroll var(--marquee-dur, 30s) linear infinite; }
+        #marqueeBar:hover .marquee-track { animation-play-state: paused; }
         .modal-backdrop {
             background-color: rgba(15, 23, 42, 0.6);
             backdrop-filter: blur(4px);
@@ -81,7 +86,7 @@
                     <i class="fa-solid fa-key mr-1"></i> 改密碼
                 </button>
 
-                <button id="studentLogoutBtn" onclick="logoutStudent()" class="hidden bg-rose-500 hover:bg-rose-400 text-white text-xs px-2 py-1.5 rounded-lg font-medium transition flex items-center">
+                <button id="logoutBtn" onclick="logout()" class="hidden bg-rose-500 hover:bg-rose-400 text-white text-xs px-2 py-1.5 rounded-lg font-medium transition flex items-center">
                     <i class="fa-solid fa-right-from-bracket mr-1"></i> 登出
                 </button>
 
@@ -92,6 +97,13 @@
             </div>
         </div>
     </header>
+
+    <!-- 跑馬燈：老師端與學生端共用；每週二顯示上週 KPI 100% 的學生 -->
+    <div id="marqueeBar" class="hidden bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-400 text-amber-900 border-b border-amber-500/40 overflow-hidden text-sm font-bold">
+        <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-1.5 overflow-hidden">
+            <div id="marqueeTrack" class="marquee-track"></div>
+        </div>
+    </div>
 
     <!-- 主要內容區 -->
     <main class="flex-grow max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
@@ -164,6 +176,47 @@
                 </div>
             </div>
 
+            <!-- 學生週 KPI 與關懷名單 -->
+            <div class="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-sm space-y-4">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-3">
+                    <div>
+                        <h3 class="font-bold text-slate-800 flex items-center text-sm sm:text-base">
+                            <i class="fa-solid fa-bullseye text-indigo-600 mr-2"></i> 學生週 KPI 與關懷名單
+                        </h3>
+                        <p class="text-[11px] sm:text-xs text-slate-500">以派發日期落在該週（週一～週日）的項目計算，老師審核「已完成」才算完成。點學生姓名可查看尚未完成或待訂正的項目。</p>
+                    </div>
+                    <div class="flex items-center space-x-2 w-full sm:w-auto">
+                        <label class="text-xs font-bold text-slate-600 shrink-0">關懷依據：</label>
+                        <select id="careBasisSelect" onchange="renderKpiOverview()" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-auto">
+                            <option value="all">全部項目 KPI</option>
+                            <option value="this">本週 KPI</option>
+                            <option value="last">上週 KPI</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    <div class="bg-slate-50/70 border border-slate-200/80 rounded-xl p-3 space-y-2">
+                        <h4 id="kpiLastWeekTitle" class="text-xs font-bold text-slate-700 flex items-center">
+                            <i class="fa-solid fa-calendar-minus text-slate-500 mr-1.5"></i> 上週 KPI
+                        </h4>
+                        <div id="kpiLastWeekList" class="space-y-1.5 max-h-64 overflow-y-auto custom-scrollbar"></div>
+                    </div>
+                    <div class="bg-slate-50/70 border border-slate-200/80 rounded-xl p-3 space-y-2">
+                        <h4 id="kpiThisWeekTitle" class="text-xs font-bold text-slate-700 flex items-center">
+                            <i class="fa-solid fa-calendar-week text-indigo-500 mr-1.5"></i> 本週 KPI
+                        </h4>
+                        <div id="kpiThisWeekList" class="space-y-1.5 max-h-64 overflow-y-auto custom-scrollbar"></div>
+                    </div>
+                    <div class="bg-rose-50/60 border border-rose-200/80 rounded-xl p-3 space-y-2">
+                        <h4 id="kpiCareTitle" class="text-xs font-bold text-rose-800 flex items-center">
+                            <i class="fa-solid fa-heart-pulse text-rose-500 mr-1.5"></i> 需要關懷（低於 80%）
+                        </h4>
+                        <div id="kpiCareList" class="space-y-1.5 max-h-64 overflow-y-auto custom-scrollbar"></div>
+                    </div>
+                </div>
+            </div>
+
             <!-- 控制頁籤與操作按鈕 -->
             <div class="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 shadow-sm flex flex-col md:flex-row justify-between items-center gap-3">
                 <div class="flex flex-wrap gap-1 sm:gap-2 bg-slate-100 p-1 rounded-lg w-full md:w-auto text-xs sm:text-sm">
@@ -175,6 +228,9 @@
                     </button>
                     <button id="tabStudentsBtn" onclick="switchTeacherTab('students')" class="flex-1 md:flex-none px-3 py-2 font-bold rounded-md text-slate-600 hover:text-slate-900">
                         <i class="fa-solid fa-user-gear mr-1"></i> 學生管理
+                    </button>
+                    <button id="tabContactbookBtn" onclick="switchTeacherTab('contactbook')" class="flex-1 md:flex-none px-3 py-2 font-bold rounded-md text-slate-600 hover:text-slate-900">
+                        <i class="fa-solid fa-book-open-reader mr-1"></i> 電子聯絡簿
                     </button>
                     <button id="tabSubjectsBtn" onclick="switchTeacherTab('subjects')" class="flex-1 md:flex-none px-3 py-2 font-bold rounded-md text-slate-600 hover:text-slate-900">
                         <i class="fa-solid fa-shapes mr-1"></i> 科目與年級設定
@@ -219,10 +275,23 @@
                         </select>
                         <select id="filterStatus" onchange="renderTeacherTasksTable()" class="bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-slate-700">
                             <option value="all">審核：全部</option>
-                            <option value="未完成">未完成</option>
-                            <option value="待訂正">待訂正</option>
+                            <option value="incomplete">未完成/待訂正</option>
                             <option value="已完成">已完成</option>
                         </select>
+                        <select id="taskTimeFilter" onchange="onTimeFilterChange_('task')" class="bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-slate-700 font-bold">
+                            <option value="all">發布時間：全部</option>
+                            <option value="today">今天</option>
+                            <option value="week">本週（週一～週日）</option>
+                            <option value="lastweek">上週</option>
+                            <option value="7d">近 7 天</option>
+                            <option value="month">本月</option>
+                            <option value="custom">自訂區間…</option>
+                        </select>
+                        <div id="taskTimeCustomBox" class="hidden items-center gap-1">
+                            <input type="date" id="taskTimeFrom" onchange="onTimeFilterChange_('task')" class="bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-slate-700 font-bold" title="發布日期從">
+                            <span class="text-slate-400">～</span>
+                            <input type="date" id="taskTimeTo" onchange="onTimeFilterChange_('task')" class="bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-slate-700 font-bold" title="發布日期到">
+                        </div>
                         <button type="button" onclick="selectPendingReviewTasks()" class="bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1.5 rounded-lg font-bold transition">
                             <i class="fa-solid fa-bell mr-1"></i>選取待審核
                         </button>
@@ -281,6 +350,20 @@
                             <select id="dispatchSubjectFilter" onchange="renderDispatchManagement()" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 font-bold text-slate-700">
                                 <option value="all">所有科目</option>
                             </select>
+                            <select id="dispatchTimeFilter" onchange="onTimeFilterChange_('dispatch')" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 font-bold text-slate-700">
+                            <option value="all">發布時間：全部</option>
+                            <option value="today">今天</option>
+                            <option value="week">本週（週一～週日）</option>
+                            <option value="lastweek">上週</option>
+                            <option value="7d">近 7 天</option>
+                            <option value="month">本月</option>
+                            <option value="custom">自訂區間…</option>
+                        </select>
+                        <div id="dispatchTimeCustomBox" class="hidden items-center gap-1">
+                            <input type="date" id="dispatchTimeFrom" onchange="onTimeFilterChange_('dispatch')" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 font-bold text-slate-700" title="發布日期從">
+                            <span class="text-slate-400">～</span>
+                            <input type="date" id="dispatchTimeTo" onchange="onTimeFilterChange_('dispatch')" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 font-bold text-slate-700" title="發布日期到">
+                        </div>
 
                             <div class="flex items-center space-x-1 pl-2 border-l border-slate-200">
                                 <button onclick="openBatchEditDispatchModal()" class="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg font-bold transition flex items-center shadow-sm">
@@ -363,6 +446,12 @@
                             <button onclick="batchChangeGradeModal()" class="bg-amber-500 hover:bg-amber-600 text-white font-bold px-2.5 py-1.5 rounded-lg transition flex items-center">
                                 <i class="fa-solid fa-arrow-right-arrow-left mr-1"></i> 變更選取年級
                             </button>
+                            <button onclick="resetSelectedStudentPwdsToDefault()" title="勾選學生後，把登入密碼改成預設密碼 0000" class="bg-slate-600 hover:bg-slate-700 text-white font-bold px-2.5 py-1.5 rounded-lg transition flex items-center">
+                                <i class="fa-solid fa-key mr-1"></i> 預設密碼 <span class="ml-1 text-[10px] font-normal opacity-80">(0000)</span>
+                            </button>
+                            <button onclick="unifyGradeAvatars()" title="把所有學生的頭像統一成各年級的對照頭像" class="bg-teal-600 hover:bg-teal-700 text-white font-bold px-2.5 py-1.5 rounded-lg transition flex items-center">
+                                <i class="fa-solid fa-face-smile mr-1"></i> 統一年級頭像
+                            </button>
                             <button onclick="batchDeleteStudents()" class="bg-rose-600 hover:bg-rose-700 text-white font-bold px-2.5 py-1.5 rounded-lg transition flex items-center">
                                 <i class="fa-solid fa-trash mr-1"></i> 刪除所選
                             </button>
@@ -373,13 +462,40 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4" id="studentCardsContainer"></div>
             </div>
 
+            <!-- 頁籤：電子聯絡簿 -->
+            <div id="teacherContactbookTab" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-6 space-y-4">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-sm sm:text-base flex items-center">
+                            <i class="fa-solid fa-book-open-reader text-indigo-600 mr-2"></i> 電子聯絡簿
+                        </h3>
+                        <p class="text-[11px] sm:text-xs text-slate-500">今天與之後的事項顯示在上方；日期已過的會收進下方「過期聯絡簿」，點開可查看過去 7 天。學生與家長登入後可以看到。</p>
+                    </div>
+                    <button onclick="openContactBookModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm px-3.5 py-2 rounded-lg font-bold shadow-sm transition flex items-center shrink-0">
+                        <i class="fa-solid fa-plus mr-1"></i> 新增聯絡簿
+                    </button>
+                </div>
+
+                <div id="tcbActiveList" class="space-y-2"></div>
+
+                <div class="border border-slate-200 rounded-xl overflow-hidden">
+                    <button type="button" onclick="toggleContactBookExpired('tcb')" class="w-full flex items-center justify-between px-3 py-2.5 bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-600 transition">
+                        <span><i class="fa-solid fa-clock-rotate-left mr-1.5"></i> 過期聯絡簿（過去 10 天，超過自動刪除）<span id="tcbExpiredCount" class="ml-1.5 bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full text-[10px]">0 筆</span></span>
+                        <i id="tcbExpiredChevron" class="fa-solid fa-chevron-down transition-transform"></i>
+                    </button>
+                    <div id="tcbExpiredWrap" class="hidden p-3 space-y-2 border-t border-slate-200">
+                        <div id="tcbExpiredList" class="space-y-2"></div>
+                    </div>
+                </div>
+            </div>
+
             <!-- 頁籤 4：科目與年級管理區 -->
             <div id="teacherSubjectsTab" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-6 space-y-6">
                 <div class="space-y-3">
                     <div class="flex justify-between items-center border-b border-slate-200 pb-2">
                         <div>
                             <h3 class="font-bold text-slate-800 text-base sm:text-lg">年級選單設定</h3>
-                            <p class="text-xs text-slate-500">可新增或刪除系統年級選項，方便學生分類與搜尋</p>
+                            <p class="text-xs text-slate-500">可新增或刪除系統年級選項，方便學生分類與搜尋。每個年級旁的頭像選單，可指定該年級統一使用的頭像（選擇後，該年級現有學生也會一起換）</p>
                         </div>
                         <button onclick="openAddGradeModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm px-3 py-1.5 rounded-lg font-bold transition flex items-center">
                             <i class="fa-solid fa-plus mr-1"></i> 新增年級
@@ -431,6 +547,7 @@
                     <div class="flex items-center space-x-3 sm:space-x-4">
                         <div class="relative shrink-0">
                             <div id="crownBadge" class="hidden absolute -top-4 -left-2 text-yellow-300 text-2xl animate-bounce drop-shadow-md z-10" title="100% 全數完成優良獎章！">👑</div>
+                            <div id="careBadge" class="hidden absolute -top-4 -left-2 text-2xl drop-shadow-md z-10">🌞</div>
                             <div id="studentAvatarContainer" class="w-12 h-12 sm:w-16 sm:h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center text-2xl sm:text-3xl border border-white/30">👨‍🎓</div>
                         </div>
 
@@ -458,6 +575,30 @@
                     </div>
                 </div>
 
+                <!-- 本週／上週 KPI（全部完成會有皇冠） -->
+                <div class="grid grid-cols-2 gap-3 sm:gap-4">
+                    <div id="studentKpiThisCard" class="relative bg-white rounded-xl border border-slate-200 p-3 sm:p-4 shadow-sm"></div>
+                    <div id="studentKpiLastCard" class="relative bg-white rounded-xl border border-slate-200 p-3 sm:p-4 shadow-sm"></div>
+                </div>
+
+                <!-- 電子聯絡簿（唯讀） -->
+                <div class="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 shadow-sm space-y-3">
+                    <h3 class="font-bold text-slate-800 flex items-center text-sm sm:text-base">
+                        <i class="fa-solid fa-book-open-reader text-indigo-600 mr-2"></i> 電子聯絡簿
+                    </h3>
+                <div id="scbActiveList" class="space-y-2"></div>
+
+                <div class="border border-slate-200 rounded-xl overflow-hidden">
+                    <button type="button" onclick="toggleContactBookExpired('scb')" class="w-full flex items-center justify-between px-3 py-2.5 bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-600 transition">
+                        <span><i class="fa-solid fa-clock-rotate-left mr-1.5"></i> 過期聯絡簿（過去 10 天，超過自動刪除）<span id="scbExpiredCount" class="ml-1.5 bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full text-[10px]">0 筆</span></span>
+                        <i id="scbExpiredChevron" class="fa-solid fa-chevron-down transition-transform"></i>
+                    </button>
+                    <div id="scbExpiredWrap" class="hidden p-3 space-y-2 border-t border-slate-200">
+                        <div id="scbExpiredList" class="space-y-2"></div>
+                    </div>
+                </div>
+                </div>
+
                 <!-- 學生家長端作業與考卷篩選工具列 -->
                 <div class="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-3">
                     <div class="flex items-center space-x-2 w-full sm:w-auto">
@@ -466,10 +607,24 @@
                             <option value="all">所有科目</option>
                         </select>
                     </div>
-                    <div class="flex items-center space-x-2 w-full sm:w-auto justify-end">
+                    <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+                        <select id="stTimeFilter" onchange="onTimeFilterChange_('st')" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700">
+                            <option value="all">發布時間：全部</option>
+                            <option value="today">今天</option>
+                            <option value="week">本週（週一～週日）</option>
+                            <option value="lastweek">上週</option>
+                            <option value="7d">近 7 天</option>
+                            <option value="month">本月</option>
+                            <option value="custom">自訂區間…</option>
+                        </select>
+                        <div id="stTimeCustomBox" class="hidden items-center gap-1">
+                            <input type="date" id="stTimeFrom" onchange="onTimeFilterChange_('st')" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700" title="發布日期從">
+                            <span class="text-slate-400">～</span>
+                            <input type="date" id="stTimeTo" onchange="onTimeFilterChange_('st')" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700" title="發布日期到">
+                        </div>
                         <select id="studentStatusFilter" onchange="renderStudentDashboardContent()" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700">
                             <option value="all">所有狀態</option>
-                            <option value="incomplete">未完成 / 待訂正</option>
+                            <option value="incomplete">未完成/待訂正</option>
                             <option value="completed">已完成</option>
                         </select>
                     </div>
@@ -687,6 +842,52 @@
         </div>
     </div>
 
+    <!-- 電子聯絡簿 新增/修改 Modal -->
+    <div id="contactBookModal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-xl space-y-4 border border-slate-200 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 id="contactBookModalTitle" class="font-bold text-slate-800">新增聯絡簿</h3>
+                <button onclick="closeModal('contactBookModal')" class="text-slate-400 hover:text-slate-600 p-1"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <input type="hidden" id="contactBookEditId">
+            <div class="space-y-3 text-xs">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">日期 *</label>
+                        <input type="date" id="contactBookDateInput" onchange="updateContactBookWeekday()" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">星期（依日期自動帶入）</label>
+                        <div id="contactBookWeekdayText" class="w-full border border-slate-200 bg-slate-50 rounded-xl px-3 py-2 text-xs font-bold text-slate-600">—</div>
+                    </div>
+                </div>
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">進度內容 *（每一項作業一列，系統自動編號；按右側「全體」可指定年級與學校）</label>
+                    <div id="contactBookItems" class="space-y-2"></div>
+                    <button type="button" onclick="addContactBookItemRow_('')" class="mt-2 text-indigo-600 font-bold text-xs hover:underline"><i class="fa-solid fa-plus mr-1"></i>新增一項</button>
+                </div>
+            </div>
+            <div class="flex space-x-2 pt-2">
+                <button onclick="closeModal('contactBookModal')" class="flex-1 bg-slate-100 text-slate-600 font-bold py-2.5 rounded-xl text-sm">取消</button>
+                <button onclick="saveContactBookEntry()" class="flex-1 bg-indigo-600 text-white font-bold py-2.5 rounded-xl text-sm">儲存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 學生尚未完成／待訂正項目 Modal -->
+    <div id="studentPendingModal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-xl space-y-4 border border-slate-200 max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <div class="flex justify-between items-start border-b border-slate-100 pb-3">
+                <div>
+                    <h3 id="studentPendingTitle" class="font-bold text-slate-800">學生姓名</h3>
+                    <p id="studentPendingSub" class="text-[11px] text-slate-500 mt-0.5"></p>
+                </div>
+                <button onclick="closeModal('studentPendingModal')" class="text-slate-400 hover:text-slate-600 p-1"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="studentPendingList" class="space-y-2 text-xs"></div>
+        </div>
+    </div>
+
     <!-- 單筆新增/編輯學生 Modal -->
     <div id="studentModal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
         <div class="bg-white rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-xl space-y-4 border border-slate-200">
@@ -707,12 +908,17 @@
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-slate-600 mb-1">年級 *</label>
-                        <select id="studentGradeInput" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none"></select>
+                        <select id="studentGradeInput" onchange="onStudentGradeChange_()" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none"></select>
                     </div>
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-slate-600 mb-1">班級資訊 (選填)</label>
-                    <input type="text" id="studentClassInput" placeholder="例如：3年2班 或 2班" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none">
+                    <label class="block text-xs font-bold text-slate-600 mb-1">頭像 <span id="studentAvatarHint" class="font-normal text-slate-400"></span></label>
+                    <input type="hidden" id="studentAvatarInput">
+                    <div id="studentAvatarPicker" class="flex flex-wrap gap-1.5"></div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">學生資訊 (選填)</label>
+                    <input type="text" id="studentClassInput" placeholder="例如：3年2班、座號、備註" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none">
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-slate-600 mb-1">4 位數個人密碼 *</label>
@@ -750,7 +956,7 @@
                 <div>
                     <label class="block text-xs font-bold text-slate-600 mb-1">學生姓名列表 (每行一位學生) *</label>
                     <textarea id="batchStudentNamesInput" rows="5" placeholder="王小明&#10;林小花&#10;張阿豪" class="w-full border border-slate-300 rounded-xl p-3 text-sm focus:outline-none custom-scrollbar"></textarea>
-                    <p class="text-[11px] text-slate-400 mt-1">系統將自動為每位批次新增的學生生成隨機 4 位數預設密碼。</p>
+                    <p class="text-[11px] text-slate-400 mt-1">每位批次新增的學生預設登入密碼都是 0000，之後可以在「學生管理 → 編輯」修改。</p>
                 </div>
             </div>
             <div class="flex space-x-2 pt-2">
@@ -970,7 +1176,9 @@
             subjects: Array.isArray(src.subjects) ? src.subjects : base.subjects,
             grades: Array.isArray(src.grades) ? src.grades : base.grades,
             students: Array.isArray(src.students) ? src.students : base.students,
-            tasks: Array.isArray(src.tasks) ? src.tasks : base.tasks
+            tasks: Array.isArray(src.tasks) ? src.tasks : base.tasks,
+            contactBook: Array.isArray(src.contactBook) ? src.contactBook : [],
+            gradeAvatars: (src.gradeAvatars && typeof src.gradeAvatars === 'object' && !Array.isArray(src.gradeAvatars)) ? src.gradeAvatars : {}
         };
     }
 
@@ -994,22 +1202,38 @@
                 throw new Error(result.message || "Google 試算表讀取失敗");
             }
 
-            // 後端直接回傳 appData；空資料則初始化一次。
+            // 這支 action=get 只回傳「登入選單用」的公開資訊（學生姓名/學校/年級/班級、科目、年級），
+            // 不含密碼、任務、聯絡簿。真正完整的資料要靠登入憑證向 action=data 取得。
             if (result && Object.keys(result).length > 0) {
                 window.appData = normalizeAppData(result);
-                console.log("Google 雲端讀取成功：", {
-                    students: window.appData.students.length,
-                    tasks: window.appData.tasks.length
-                });
+                // 公開資料沒有任務與聯絡簿；不要讓預設範例任務混進來
+                window.appData.tasks = [];
+                window.appData.contactBook = [];
             } else {
                 window.appData = cloneDefaultData();
-                await window.saveData({ silentRender: true });
+                window.appData.tasks = [];
+                window.appData.contactBook = [];
             }
 
-            const beforeCount = window.appData.tasks.length;
-            checkAndCleanLifeCycleTasks();
-            if (window.appData.tasks.length !== beforeCount) {
-                await window.saveData({ silentRender: true });
+            // 重新整理時如果還保有有效的登入憑證，馬上換成這個身分該看的完整資料。
+            // 沒換成功之前不可以讓畫面或存檔使用公開資料，否則可能蓋掉真正的任務與聯絡簿。
+            if (authToken) {
+                let full = null;
+                try {
+                    full = await gasPost_("data", { token: authToken });
+                } catch (e) {
+                    if (!(e && e.unauthorized)) throw e;
+                }
+                if (full && full.status === "success" && full.data) {
+                    window.appData = normalizeAppData(full.data);
+                    const beforeCount = window.appData.tasks.length;
+                    checkAndCleanLifeCycleTasks();
+                    if (isTeacherLoggedIn && window.appData.tasks.length !== beforeCount) {
+                        await window.saveData({ silentRender: true });
+                    }
+                } else {
+                    clearAuthAndLogout("登入已過期或沒有權限，請重新登入。", false);
+                }
             }
 
             updateConnectionStatus('connected');
@@ -1018,6 +1242,14 @@
             // 不再把讀取失敗偽裝成正常資料庫資料；保留預設資料只供本次頁面使用。
             window.appData = cloneDefaultData();
             checkAndCleanLifeCycleTasks();
+            // 這份是預設範例資料，絕對不能被存回雲端：清掉本機登入狀態，沒有憑證就不會送出任何儲存
+            authToken = null;
+            isTeacherLoggedIn = false;
+            loggedInStudentId = null;
+            currentRole = "student";
+            sessionStorage.removeItem("authToken");
+            sessionStorage.removeItem("isTeacherLoggedIn");
+            sessionStorage.removeItem("loggedInStudentId");
             updateConnectionStatus('error');
             alert("無法讀取雲端學生資料。\n\n本次畫面會暫時使用預設資料，但不會假裝已成功同步。\n\n錯誤：" + (e.message || e));
         }
@@ -1027,8 +1259,12 @@
 
     // ===== 儲存佇列：合併連續儲存、鎖定逾時自動重試 =====
     let _saveRunning = false;
+    // 老師主動改密碼時才會是非空字串；其餘一律送空字串，後端看到空字串就會保留原本的密碼雜湊，
+    // 不然 window.appData.teacherPwd 預設值殘留在畫面上，每次存檔都會把密碼悄悄重設成預設值。
+    let _pendingTeacherPwdPlain = "";
     let _saveWaiters = [];
     let _saveWantsRender = false;
+    let _saveWantsBusy = false;   // 使用者主動的新增/修改/刪除才擋畫面並提示；背景自動存檔（silentRender）不打擾
     window._saveSeq = 0; // 每次有新儲存或儲存完成就 +1，供輪詢判斷資料是否過期
 
     window.isSavePending = function() {
@@ -1038,25 +1274,46 @@
     function _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
     function _isRetryable(err) {
+        if (err && err.unauthorized === true) return false;
         const msg = String((err && err.message) || err || "");
         return err && err.retryable === true ||
                /鎖定逾時|busy|Lock|HTTP 5\d\d|Failed to fetch|NetworkError|Load failed/i.test(msg);
     }
 
-    async function _postOnce() {
-        // 每次重試都重新取最新資料，避免送出舊內容
-        const payload = JSON.stringify(normalizeAppData(window.appData));
-
-        const response = await fetch(GAS_URL + "?action=save", {
+    // 統一的後端 POST 工具：action=login/data/save/patch/changePwd/logout 都走這支，
+    // 自動帶上 token（登入動作本身不需要，呼叫時傳 null）。
+    async function gasPost_(action, bodyObj) {
+        const response = await fetch(GAS_URL + "?action=" + action, {
             method: "POST",
             redirect: "follow",
             cache: "no-store",
             headers: { "Content-Type": "text/plain;charset=utf-8" },
-            body: payload
+            body: JSON.stringify(bodyObj || {})
         });
         if (!response.ok) throw new Error("資料伺服器 HTTP " + response.status);
-
         const result = await response.json();
+        if (result && result.status === "unauthorized") {
+            const e = new Error(result.message || "登入已過期或沒有權限，請重新登入");
+            e.unauthorized = true;
+            throw e;
+        }
+        return result;
+    }
+
+    async function _postOnce() {
+        if (!authToken) {
+            const e = new Error("尚未登入老師身分，無法儲存");
+            e.unauthorized = true;
+            throw e;
+        }
+        // 每次重試都重新取最新資料，避免送出舊內容
+        const payload = normalizeAppData(window.appData);
+        payload.teacherPwd = _pendingTeacherPwdPlain || "";
+        delete payload.champions; // 跑馬燈名單是後端即時算的，不需要存回去
+        // pwdPlain 只是給老師端畫面顯示用的，絕不送回後端（舊版後端會原樣存起來）
+        payload.students = payload.students.map(st => { const c = { ...st }; delete c.pwdPlain; return c; });
+
+        const result = await gasPost_("save", { token: authToken, data: payload });
         if (result && result.status === "busy") {
             const e = new Error(result.message || "伺服器忙碌中");
             e.retryable = true;
@@ -1097,19 +1354,29 @@
                 _saveWaiters = [];
                 const wantsRender = _saveWantsRender;
                 _saveWantsRender = false;
+                const wantsBusy = _saveWantsBusy && typeof showBusy_ === "function";
+                _saveWantsBusy = false;
 
                 updateConnectionStatus('connecting');
+                if (wantsBusy) showBusy_("同步中，請稍候…");
                 const r = await _saveWithRetry();
+                if (wantsBusy) hideBusy_();
+                _pendingTeacherPwdPlain = ""; // 這輪存檔（無論成功或放棄重試）已經用過，清掉避免影響下一次存檔
                 window._saveSeq++;
 
                 if (r.ok) {
                     window.appData = normalizeAppData(window.appData);
                     updateConnectionStatus('connected');
                     if (wantsRender) window.renderRoleView();
+                    if (wantsBusy) showDoneToast_("已同步完成");
                 } else {
                     console.error("儲存至 Google 試算表失敗:", r.error);
                     updateConnectionStatus('error');
-                    alert("資料尚未成功儲存到 Google 試算表。\n\n已自動重試多次仍失敗，請稍後再操作一次。\n\n錯誤：" + ((r.error && r.error.message) || r.error));
+                    if (r.error && r.error.unauthorized && typeof clearAuthAndLogout === "function") {
+                        clearAuthAndLogout("登入已過期或沒有權限，請重新登入。");
+                    } else {
+                        alert("資料尚未成功儲存到 Google 試算表。\n\n已自動重試多次仍失敗，請稍後再操作一次。\n\n錯誤：" + ((r.error && r.error.message) || r.error));
+                    }
                 }
                 waiters.forEach(fn => fn(r.ok));
             }
@@ -1120,7 +1387,7 @@
 
     window.saveData = function(options = {}) {
         window._saveSeq++;
-        if (!options.silentRender) _saveWantsRender = true;
+        if (!options.silentRender) { _saveWantsRender = true; _saveWantsBusy = true; }
         return new Promise(resolve => {
             _saveWaiters.push(resolve);
             _drainSaveQueue();
@@ -1211,19 +1478,13 @@
 
     async function pollTeacherRealtimeData() {
         if (teacherRealtimeBusy || currentRole !== "teacher" || !isTeacherLoggedIn) return;
-        if (window.isSavePending()) return; // 有儲存進行中，先不要用雲端舊資料覆蓋本機
+        if (window.isSavePending() || window._teacherPatching) return; // 有儲存/審核進行中，先不要用雲端舊資料覆蓋本機
+        if (!authToken) { clearAuthAndLogout("登入已過期或沒有權限，請重新登入。"); return; }
         teacherRealtimeBusy = true;
         const seqAtStart = window._saveSeq;
 
         try {
-            const response = await fetch(GAS_URL + "?action=get&_realtime=" + Date.now(), {
-                method: "GET",
-                redirect: "follow",
-                cache: "no-store"
-            });
-            if (!response.ok) throw new Error("即時同步 HTTP " + response.status);
-
-            const result = await response.json();
+            const result = await gasPost_("data", { token: authToken });
             if (!result || result.status === "error") {
                 throw new Error(result?.message || "即時同步讀取失敗");
             }
@@ -1231,7 +1492,7 @@
             // 請求期間若發生過儲存，這份雲端資料已過期，直接丟棄
             if (window.isSavePending() || window._saveSeq !== seqAtStart) return;
 
-            const remoteTasks = Array.isArray(result.tasks) ? result.tasks : [];
+            const remoteTasks = Array.isArray(result.data && result.data.tasks) ? result.data.tasks : [];
             const pendingTasks = getPendingReviewTasks(remoteTasks);
             const currentPendingIds = new Set(pendingTasks.map(t => String(t.id)));
 
@@ -1247,7 +1508,10 @@
 
             // 學生端只會改 tasks，因此即時同步時只替換 tasks，避免干擾老師正在編輯的學生資料。
             window.appData.tasks = remoteTasks;
+            if (result.data && result.data.champions) window.appData.champions = result.data.champions;
+            renderMarquee_();
             updateTeacherPendingBadge(pendingTasks);
+            if (typeof renderKpiOverview === "function") renderKpiOverview();
 
             // 老師目前正在看審核頁時，直接更新表格；其他頁籤不強制重繪。
             const teacherTasksTab = document.getElementById("teacherTasksTab");
@@ -1255,7 +1519,11 @@
                 renderTeacherTasksTable();
             }
         } catch (e) {
-            console.warn("老師端即時同步暫時失敗：", e);
+            if (e && e.unauthorized) {
+                clearAuthAndLogout("登入已過期或沒有權限，請重新登入。");
+            } else {
+                console.warn("老師端即時同步暫時失敗：", e);
+            }
         } finally {
             teacherRealtimeBusy = false;
         }
@@ -1279,6 +1547,7 @@
 let currentRole = "student";
 let loggedInStudentId = sessionStorage.getItem("loggedInStudentId") || null;
 let isTeacherLoggedIn = sessionStorage.getItem("isTeacherLoggedIn") === "true";
+let authToken = sessionStorage.getItem("authToken") || null; // 登入後端拿到的憑證，所有讀寫請求都要帶著它
 let lastActivityTime = parseInt(sessionStorage.getItem("lastActivityTime") || Date.now(), 10);
 const IDLE_TIMEOUT_MS = 60 * 60 * 1000;
 
@@ -1303,7 +1572,7 @@ function closeModal(modalId) {
 }
 
 function initTodayDateInput() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = localDateStr_();
     const dateInput = document.getElementById("taskDateInput");
     if (dateInput) dateInput.value = today;
 }
@@ -1319,6 +1588,11 @@ function saveAuthState() {
         sessionStorage.setItem("loggedInStudentId", loggedInStudentId);
     } else {
         sessionStorage.removeItem("loggedInStudentId");
+    }
+    if (authToken) {
+        sessionStorage.setItem("authToken", authToken);
+    } else {
+        sessionStorage.removeItem("authToken");
     }
     updateLastActivity();
 }
@@ -1342,15 +1616,24 @@ function initIdleChecker() {
     }, 10000);
 }
 
-function clearAuthAndLogout(message) {
+function clearAuthAndLogout(message, reloadPublic = true) {
+    const tokenToRevoke = authToken;
     isTeacherLoggedIn = false;
     loggedInStudentId = null;
+    authToken = null;
     currentRole = "student";
     sessionStorage.removeItem("isTeacherLoggedIn");
     sessionStorage.removeItem("loggedInStudentId");
+    sessionStorage.removeItem("authToken");
     sessionStorage.removeItem("lastActivityTime");
+    if (tokenToRevoke) {
+        gasPost_("logout", { token: tokenToRevoke }).catch(() => {}); // 通知後端失效即可，失敗也不影響本機登出
+    }
     if (message) alert(message);
     renderRoleView();
+    // 登出後換回「登入選單用」的公開資料：否則學生登入後 appData 只剩自己，下次登入就看不到其他人，
+    // 老師登出後畫面上也不該還留著完整資料
+    if (reloadPublic) loadDataFromSheets();
 }
 
 function handleRoleSwitch() {
@@ -1368,51 +1651,91 @@ function handleRoleSwitch() {
     }
 }
 
-function verifyTeacherLogin() {
+async function verifyTeacherLogin() {
     const inputPwd = document.getElementById("teacherPwdInput").value;
-    if (inputPwd === window.appData.teacherPwd) {
-        closeModal("teacherLoginModal");
-        isTeacherLoggedIn = true;
-        currentRole = "teacher";
-        saveAuthState();
-        renderRoleView();
-    } else {
-        document.getElementById("teacherPwdError").classList.remove("hidden");
+    const btn = document.querySelector('[onclick="verifyTeacherLogin()"]');
+    if (btn) btn.disabled = true;
+    showBusy_("登入中，請稍候…");
+    try {
+        const result = await gasPost_("login", { role: "teacher", pwd: inputPwd });
+        if (result && result.status === "success") {
+            if (loggedInStudentId && !isTeacherLoggedIn && authToken && authToken !== result.token) {
+                gasPost_("logout", { token: authToken }).catch(() => {});
+            }
+            authToken = result.token;
+            isTeacherLoggedIn = true;
+            loggedInStudentId = null;
+            currentRole = "teacher";
+            window.appData = normalizeAppData(result.data);
+            saveAuthState();
+            closeModal("teacherLoginModal");
+            renderRoleView();
+        } else if (result && result.status === "locked") {
+            document.getElementById("teacherPwdError").innerText = result.message || "嘗試次數過多，請稍後再試";
+            document.getElementById("teacherPwdError").classList.remove("hidden");
+        } else {
+            document.getElementById("teacherPwdError").innerText = "密碼錯誤，請重新輸入";
+            document.getElementById("teacherPwdError").classList.remove("hidden");
+        }
+    } catch (e) {
+        hideBusy_();
+        alert("登入時發生錯誤，請檢查網路後再試一次。\n\n錯誤：" + (e.message || e));
+    } finally {
+        hideBusy_();
+        if (btn) btn.disabled = false;
     }
 }
 
 function openStudentLoginModal() {
     const select = document.getElementById("loginStudentSelect");
-    select.innerHTML = window.appData.students.map(s => {
-        const fullClass = [s.school, s.grade, s.className].filter(Boolean).join(' ');
-        return `<option value="${s.id}">${s.name} (${fullClass})</option>`;
-    }).join('');
+    select.innerHTML = sortStudentsByGradeSchool_(window.appData.students)
+        .map(s => `<option value="${s.id}">${escHtml_(studentOptionLabel_(s))}</option>`).join('');
     document.getElementById("studentLoginPwdInput").value = "";
     document.getElementById("studentLoginError").classList.add("hidden");
     openModal("studentLoginModal");
 }
 
-function verifyStudentLogin() {
+async function verifyStudentLogin() {
     const stId = document.getElementById("loginStudentSelect").value;
     const pwd = document.getElementById("studentLoginPwdInput").value;
-    const student = window.appData.students.find(s => s.id === stId);
-
-    if (student && student.pwd === pwd) {
-        loggedInStudentId = stId;
-        saveAuthState();
-        closeModal("studentLoginModal");
-        renderRoleView();
-    } else {
-        document.getElementById("studentLoginError").classList.remove("hidden");
+    const btn = document.querySelector('[onclick="verifyStudentLogin()"]');
+    if (btn) btn.disabled = true;
+    showBusy_("登入中，請稍候…");
+    try {
+        const result = await gasPost_("login", { role: "student", studentId: stId, pwd: pwd });
+        if (result && result.status === "success") {
+            // 換成學生身分：先讓原本的老師憑證失效，避免老師/學生身分混在一起
+            if (isTeacherLoggedIn && authToken && authToken !== result.token) {
+                gasPost_("logout", { token: authToken }).catch(() => {});
+            }
+            isTeacherLoggedIn = false;
+            authToken = result.token;
+            loggedInStudentId = result.studentId || stId;
+            currentRole = "student";
+            window.appData = normalizeAppData(result.data);
+            saveAuthState();
+            closeModal("studentLoginModal");
+            renderRoleView();
+        } else if (result && result.status === "locked") {
+            document.getElementById("studentLoginError").innerText = result.message || "嘗試次數過多，請稍後再試";
+            document.getElementById("studentLoginError").classList.remove("hidden");
+        } else {
+            document.getElementById("studentLoginError").innerText = "密碼錯誤，請重新輸入";
+            document.getElementById("studentLoginError").classList.remove("hidden");
+        }
+    } catch (e) {
+        hideBusy_();
+        alert("登入時發生錯誤，請檢查網路後再試一次。\n\n錯誤：" + (e.message || e));
+    } finally {
+        hideBusy_();
+        if (btn) btn.disabled = false;
     }
 }
 
 function openTeacherQuickStudentModal() {
     const select = document.getElementById("teacherQuickStudentSelect");
-    select.innerHTML = window.appData.students.map(s => {
-        const fullClass = [s.school, s.grade, s.className].filter(Boolean).join(' ');
-        return `<option value="${s.id}">${s.name} - ${fullClass}</option>`;
-    }).join('');
+    select.innerHTML = sortStudentsByGradeSchool_(window.appData.students)
+        .map(s => `<option value="${s.id}">${escHtml_(studentOptionLabel_(s))}</option>`).join('');
     openModal("teacherQuickStudentModal");
 }
 
@@ -1425,19 +1748,41 @@ function teacherSelectStudentToView() {
     renderRoleView();
 }
 
+function logoutTeacher() {
+    if (!confirm("確定要登出老師端嗎？")) return;
+    clearAuthAndLogout("");
+}
+
+// 共用登出鈕：老師登入中 → 登出老師；否則 → 登出學生
+function logout() {
+    if (isTeacherLoggedIn) logoutTeacher();
+    else logoutStudent();
+}
+
 function logoutStudent() {
+    // 老師「以學生身分預覽」時也會呼叫這支，那種情況下 token 其實是老師的，不能清掉。
+    if (!isTeacherLoggedIn) {
+        const tokenToRevoke = authToken;
+        authToken = null;
+        if (tokenToRevoke) gasPost_("logout", { token: tokenToRevoke }).catch(() => {});
+    }
+    const wasTeacherPreview = isTeacherLoggedIn;
     loggedInStudentId = null;
     saveAuthState();
     renderRoleView();
+    if (!wasTeacherPreview) loadDataFromSheets(); // 學生登出：把學生名單換回完整公開名單
 }
 
 function renderRoleView() {
+    renderMarquee_();
     updateStudentSubmitBar();
     const switchBtnText = document.getElementById("switchBtnText");
     const roleBadge = document.getElementById("roleBadge");
     const currentUserName = document.getElementById("currentUserName");
     const changeStudentPwdBtn = document.getElementById("changeStudentPwdBtn");
-    const studentLogoutBtn = document.getElementById("studentLogoutBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
+    // 老師或學生任一身分登入中，就顯示同一顆登出鈕
+    logoutBtn.classList.toggle("hidden", !(isTeacherLoggedIn || loggedInStudentId));
 
     const teacherView = document.getElementById("teacherView");
     const studentView = document.getElementById("studentView");
@@ -1449,7 +1794,6 @@ function renderRoleView() {
         currentUserName.innerText = "導師";
 
         changeStudentPwdBtn.classList.add("hidden");
-        studentLogoutBtn.classList.add("hidden");
 
         teacherView.classList.remove("hidden");
         studentView.classList.add("hidden");
@@ -1467,14 +1811,12 @@ function renderRoleView() {
         if (student) {
             currentUserName.innerText = student.name;
             changeStudentPwdBtn.classList.remove("hidden");
-            studentLogoutBtn.classList.remove("hidden");
             document.getElementById("studentNotLoggedInCard").classList.add("hidden");
             document.getElementById("studentDashboard").classList.remove("hidden");
             renderStudentDashboard(student);
         } else {
             currentUserName.innerText = "請先登入";
             changeStudentPwdBtn.classList.add("hidden");
-            studentLogoutBtn.classList.add("hidden");
             document.getElementById("studentNotLoggedInCard").classList.remove("hidden");
             document.getElementById("studentDashboard").classList.add("hidden");
         }
@@ -1502,7 +1844,7 @@ function checkAndCleanLifeCycleTasks() {
 /* ==================== 老師端核心邏輯 ==================== */
 
 function switchTeacherTab(tabName) {
-    const tabs = ['tasks', 'dispatch', 'students', 'subjects'];
+    const tabs = ['tasks', 'dispatch', 'students', 'contactbook', 'subjects'];
     tabs.forEach(t => {
         const btn = document.getElementById(`tab${t.charAt(0).toUpperCase() + t.slice(1)}Btn`);
         const view = document.getElementById(`teacher${t.charAt(0).toUpperCase() + t.slice(1)}Tab`);
@@ -1520,6 +1862,7 @@ function switchTeacherTab(tabName) {
     if (tabName === 'tasks') renderTeacherTasksTable();
     if (tabName === 'dispatch') renderDispatchManagement();
     if (tabName === 'students') renderStudentsCards();
+    if (tabName === 'contactbook') renderContactBook();
     if (tabName === 'subjects') renderSubjectsAndGradesTags();
 }
 
@@ -1535,9 +1878,11 @@ function renderTeacherDashboard() {
 
     populateTeacherFilterDropdowns();
     renderSubjectCompletionRates();
+    renderKpiOverview();
     renderTeacherTasksTable();
     renderDispatchManagement();
     renderStudentsCards();
+    renderContactBook();
     renderSubjectsAndGradesTags();
     updateTeacherPendingBadge(getPendingReviewTasks(window.appData.tasks));
 }
@@ -1572,7 +1917,7 @@ function populateTeacherFilterDropdowns() {
     if (rateStSelect) {
         const curRateSt = rateStSelect.value;
         rateStSelect.innerHTML = `<option value="all">全體學生 (整體平均)</option>` +
-            window.appData.students.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+            sortStudentsByGradeSchool_(window.appData.students).map(s => `<option value="${s.id}">${escHtml_(studentOptionLabel_(s))}</option>`).join('');
         rateStSelect.value = curRateSt || "all";
     }
 
@@ -1589,6 +1934,525 @@ function populateTeacherFilterDropdowns() {
 function isStudentAllCompleted(studentId) {
     const tasks = (window.appData.tasks || []).filter(t => t.studentId === studentId);
     return tasks.length > 0 && tasks.every(t => t.teacherStatus === "已完成");
+}
+
+/* 共用：自然週（週一～週日）的日期範圍，offsetWeeks=0 本週、-1 上週，依本機時區計算 */
+function getWeekRange_(offsetWeeks = 0) {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const day = now.getDay(); // 0=週日 ... 6=週六
+    const diffToMonday = (day === 0 ? -6 : 1 - day);
+    const monday = new Date(now);
+    monday.setDate(now.getDate() + diffToMonday + offsetWeeks * 7);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+    return { start: monday, end: sunday };
+}
+
+function isDateInWeek_(dateStr, offsetWeeks) {
+    if (!dateStr) return false;
+    const d = new Date(dateStr + "T00:00:00");
+    if (isNaN(d.getTime())) return false;
+    const { start, end } = getWeekRange_(offsetWeeks);
+    return d >= start && d <= end;
+}
+
+function getWeekLabel_(offsetWeeks) {
+    const { start, end } = getWeekRange_(offsetWeeks);
+    return `${start.getMonth() + 1}/${start.getDate()}～${end.getMonth() + 1}/${end.getDate()}`;
+}
+
+/* ===== 同步狀態提示：進行中擋住畫面（避免還沒同步完就做下一個動作），完成後跳出提示 ===== */
+function showBusy_(text) {
+    let el = document.getElementById("busyOverlay");
+    if (!el) {
+        el = document.createElement("div");
+        el.id = "busyOverlay";
+        el.className = "hidden fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/40 backdrop-blur-[1px]";
+        el.innerHTML = `<div class="bg-white rounded-2xl shadow-2xl px-7 py-6 flex items-center gap-3 border border-slate-200">
+            <i class="fa-solid fa-spinner fa-spin text-indigo-600 text-xl"></i>
+            <span id="busyOverlayText" class="font-extrabold text-slate-700 text-sm sm:text-base"></span></div>`;
+        document.body.appendChild(el);
+    }
+    document.getElementById("busyOverlayText").innerText = text;
+    el.classList.remove("hidden");
+}
+function hideBusy_() {
+    document.getElementById("busyOverlay")?.classList.add("hidden");
+}
+let _doneToastTimer = null;
+function showDoneToast_(text) {
+    let el = document.getElementById("doneToast");
+    if (!el) {
+        el = document.createElement("div");
+        el.id = "doneToast";
+        el.className = "hidden fixed left-1/2 top-1/3 -translate-x-1/2 z-[10001] bg-emerald-600 text-white rounded-2xl shadow-2xl px-8 py-5 font-extrabold text-base sm:text-lg flex items-center gap-2";
+        document.body.appendChild(el);
+    }
+    el.innerHTML = `<i class="fa-solid fa-circle-check"></i><span></span>`;
+    el.querySelector("span").innerText = text;
+    el.classList.remove("hidden");
+    clearTimeout(_doneToastTimer);
+    _doneToastTimer = setTimeout(() => el.classList.add("hidden"), 2000);
+}
+
+/* 共用：防止姓名/學校/聯絡簿內容含有 < > 等字元時破壞版面 */
+function escHtml_(v) {
+    return String(v == null ? "" : v)
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+/* 共用：學生 KPI（派發日期落在該期間的項目數、老師審核「已完成」數、完成率）
+   period：'this' 本週、'last' 上週、'all' 全部項目 */
+const KPI_CARE_THRESHOLD = 80;
+function getStudentKpi(studentId, period) {
+    const offset = period === 'last' ? -1 : 0;
+    const tasks = (window.appData.tasks || []).filter(t =>
+        t.studentId === studentId && (period === 'all' || isDateInWeek_(t.date, offset)));
+    const total = tasks.length;
+    const completed = tasks.filter(t => t.teacherStatus === "已完成").length;
+    const rate = total > 0 ? Math.round((completed / total) * 100) : 0;
+    return { total, completed, rate };
+}
+
+function getStudentWeeklyKpi(studentId) {
+    return getStudentKpi(studentId, 'this');
+}
+
+/* 需要關懷：全部項目的老師審核完成率低於 80%（有項目才算）。老師端與學生端頭像都用這個規則 */
+function isStudentNeedsCare_(studentId) {
+    const k = getStudentKpi(studentId, 'all');
+    return k.total > 0 && k.rate < KPI_CARE_THRESHOLD;
+}
+function careIconHtml_(studentId, cls) {
+    if (!isStudentNeedsCare_(studentId)) return "";
+    const k = getStudentKpi(studentId, 'all');
+    return `<span class="${cls}" title="需要關懷：全部項目完成率 ${k.rate}%（低於 ${KPI_CARE_THRESHOLD}%）">🌞</span>`;
+}
+
+/* ===== 跑馬燈 =====
+   每週二到週日顯示「上週 KPI 100%」的學生（週一不顯示），依完成的快慢排序（名單由後端算好放在 appData.champions）。
+   老師端與學生端共用同一條。 */
+function renderMarquee_(now = new Date()) {
+    const bar = document.getElementById("marqueeBar");
+    const track = document.getElementById("marqueeTrack");
+    if (!bar || !track) return;
+
+    // 跑馬燈所有人（含還沒登入的）都看得到；上週 KPI 100% 的名單從週二結算、顯示到週日，週一不顯示
+    // （週一起算新的一週，名單要到週二才公布）。getDay()：0＝週日、1＝週一
+    const loggedIn = isTeacherLoggedIn || !!loggedInStudentId;
+    const champions = (window.appData && window.appData.champions) || {};
+    const list = Array.isArray(champions.list) ? champions.list : [];
+    const showChampions = loggedIn && now.getDay() !== 1 && list.length > 0;
+
+    if (showChampions) {
+        const medals = ["🥇", "🥈", "🥉"];
+        const names = list.map((c, i) =>
+            `${medals[i] || "🌟"} ${escHtml_(c.name)}（${escHtml_([c.school, c.grade].filter(Boolean).join(" "))}）`).join("　");
+        const range = champions.weekStart && champions.weekEnd ? `（${champions.weekStart.slice(5).replace("-", "/")}～${champions.weekEnd.slice(5).replace("-", "/")}）` : "";
+        track.innerHTML = `🎉 恭喜以下同學上週${range}完成所有進度！　${names}　太棒了，繼續保持！🎉`;
+    } else {
+        track.innerHTML = `📣 歡迎來到基翔小學通！按時完成作業、送出審核，上週全部完成的同學每週二會登上跑馬燈喔 ✨`;
+    }
+    bar.classList.remove("hidden");
+    // 文字越長跑越久，維持差不多的閱讀速度
+    track.style.setProperty("--marquee-dur", Math.max(20, Math.round(track.textContent.length * 0.45)) + "s");
+}
+
+/* 這個期間有項目、而且全部都老師審核完成 → 皇冠 */
+function isKpiFull_(k) {
+    return k.total > 0 && k.completed === k.total;
+}
+
+/* ===== 發布時間篩選（老師端進度審核／派發管理、學生端快速篩選共用）=====
+   發布時間＝項目的「發布日期」。prefix：task＝進度審核、dispatch＝派發項目管理、st＝學生端 */
+const TIME_FILTER_RENDERERS_ = {
+    task: () => renderTeacherTasksTable(),
+    dispatch: () => renderDispatchManagement(),
+    st: () => renderStudentDashboardContent()
+};
+
+function onTimeFilterChange_(prefix) {
+    const mode = document.getElementById(prefix + "TimeFilter")?.value || "all";
+    const box = document.getElementById(prefix + "TimeCustomBox");
+    if (box) {
+        box.classList.toggle("hidden", mode !== "custom");
+        box.classList.toggle("flex", mode === "custom");
+    }
+    if (TIME_FILTER_RENDERERS_[prefix]) TIME_FILTER_RENDERERS_[prefix]();
+}
+
+function readTimeFilter_(prefix) {
+    return {
+        mode: document.getElementById(prefix + "TimeFilter")?.value || "all",
+        from: document.getElementById(prefix + "TimeFrom")?.value || "",
+        to: document.getElementById(prefix + "TimeTo")?.value || ""
+    };
+}
+
+function matchesTimeFilter_(dateStr, f) {
+    if (!f || f.mode === "all") return true;
+    if (!dateStr) return false;
+    const today = localDateStr_();
+    switch (f.mode) {
+        case "today": return dateStr === today;
+        case "week": return isDateInWeek_(dateStr, 0);
+        case "lastweek": return isDateInWeek_(dateStr, -1);
+        case "7d": return dateStr >= addDaysStr_(today, -6) && dateStr <= today; // 含今天共 7 天
+        case "month": return dateStr.slice(0, 7) === today.slice(0, 7);
+        case "custom":
+            if (f.from && dateStr < f.from) return false;
+            if (f.to && dateStr > f.to) return false;
+            return true;
+        default: return true;
+    }
+}
+
+/* KPI 小標籤的顏色：沒有項目＝灰、達標＝綠、未達標＝橘 */
+function kpiToneClass_(k) {
+    if (k.total === 0) return "bg-slate-50 text-slate-400";
+    return k.rate >= KPI_CARE_THRESHOLD ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600";
+}
+function kpiText_(k) {
+    return k.total === 0 ? "無項目" : `${k.completed}/${k.total}（${k.rate}%）`;
+}
+
+/* ==================== 電子聯絡簿 ==================== */
+const WEEKDAY_NAMES_ = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
+const CONTACT_BOOK_EXPIRED_DAYS = 10; // 過期區顯示天數；超過這天數後端會自動刪除（需與 Code.gs CONTACT_BOOK_KEEP_DAYS 一致）
+const contactBookExpiredOpen_ = { tcb: false, scb: false }; // 老師端／學生端「過期聯絡簿」是否展開
+
+// 本機時區的 YYYY-MM-DD（toISOString 是 UTC，台灣凌晨 0～8 點會差一天）
+function localDateStr_(d = new Date()) {
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${d.getFullYear()}-${m}-${day}`;
+}
+function weekdayOf_(dateStr) {
+    const d = new Date(dateStr + "T00:00:00");
+    return isNaN(d.getTime()) ? "" : WEEKDAY_NAMES_[d.getDay()];
+}
+function addDaysStr_(dateStr, n) {
+    const d = new Date(dateStr + "T00:00:00");
+    d.setDate(d.getDate() + n);
+    return localDateStr_(d);
+}
+
+// 今天與之後＝進行中；今天之前、且在過去 10 天內＝過期（收在可展開區）；更早的另外計數
+function getContactBookGroups_(editable) {
+    const today = localDateStr_();
+    const from = addDaysStr_(today, -CONTACT_BOOK_EXPIRED_DAYS);
+    let all = (window.appData.contactBook || []).filter(e => e && e.date);
+    if (!editable) { const v = contactBookViewer_(); all = all.filter(e => entryItems_(e).some(it => itemAppliesTo_(it, v))); }
+    const byDateAsc = (a, b) => a.date.localeCompare(b.date) || String(a.id).localeCompare(String(b.id));
+    const byDateDesc = (a, b) => b.date.localeCompare(a.date) || String(a.id).localeCompare(String(b.id));
+    return {
+        today,
+        active: all.filter(e => e.date >= today).sort(byDateAsc),
+        expired: all.filter(e => e.date < today && e.date >= from).sort(byDateDesc),
+        older: all.filter(e => e.date < from)
+    };
+}
+
+// 內容以換行分項；開頭的「1.」「2、」之類編號會先去掉再重新編號
+function parseContactBookItems_(content) {
+    return String(content || "").split(/\r?\n/)
+        .map(l => l.replace(/^\s*\d+\s*[.、．)]\s*/, "").trim())
+        .filter(Boolean);
+}
+// 一筆聯絡簿的項目：[{text, targets:[{grade, schools:[]}]}]；targets 空陣列＝全體學生
+// （舊格式 grades[]／schools[] 會自動換算成 targets）
+function cbSchoolsOfGrade_(grade) {
+    return [...new Set((window.appData.students || []).filter(x => x.grade === grade).map(x => (x.school || "").trim()).filter(Boolean))];
+}
+function normalizeItemTargets_(it) {
+    if (Array.isArray(it.targets)) {
+        return it.targets.filter(t => t && t.grade && Array.isArray(t.schools) && t.schools.length)
+            .map(t => ({ grade: t.grade, schools: t.schools.slice() }));
+    }
+    const gs = Array.isArray(it.grades) ? it.grades : [], ss = Array.isArray(it.schools) ? it.schools : [];
+    if (!gs.length && !ss.length) return [];
+    return (gs.length ? gs : (window.appData.grades || [])).map(g => ({
+        grade: g, schools: ss.length ? ss.slice() : cbSchoolsOfGrade_(g)
+    })).filter(t => t.schools.length);
+}
+function entryItems_(e) {
+    if (Array.isArray(e.items) && e.items.length) {
+        return e.items.map(it => ({ text: String(it.text || "").trim(), targets: normalizeItemTargets_(it) })).filter(it => it.text);
+    }
+    return parseContactBookItems_(e.content).map(t => ({ text: t, targets: [] }));
+}
+function itemAppliesTo_(it, st) {
+    if (!st || !it.targets.length) return true;
+    return it.targets.some(t => t.grade === st.grade && t.schools.includes(st.school));
+}
+function itemTargetLabel_(it) {
+    if (!it.targets.length) return "全體";
+    return it.targets.map(t => {
+        const all = cbSchoolsOfGrade_(t.grade);
+        const full = all.length && all.every(x => t.schools.includes(x));
+        return `${t.grade}（${full ? "全部" : t.schools.join("、")}）`;
+    }).join("；");
+}
+// 目前「學生端」的檢視對象（學生本人或老師檢視學生端時選的學生）
+function contactBookViewer_() {
+    return (window.appData.students || []).find(x => x.id === loggedInStudentId) || null;
+}
+function contactBookItemsHtml_(e, viewer) {
+    const all = entryItems_(e);
+    const items = viewer === undefined ? all : all.filter(it => itemAppliesTo_(it, viewer));
+    if (!items.length) return "";
+    const showTag = viewer === undefined; // 老師端才標示對象
+    return `<div class="text-[11px] font-bold text-indigo-600 mt-1">共 ${items.length} 項作業</div>
+        <ol class="mt-1 space-y-0.5 text-xs sm:text-sm text-slate-700">${items.map((it, i) =>
+            `<li class="flex gap-1.5"><span class="shrink-0 font-bold text-indigo-600">${i + 1}.</span><span class="min-w-0 break-words whitespace-pre-wrap">${escHtml_(it.text)}${showTag && it.targets.length ? ` <span class="inline-block text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded align-middle">${escHtml_(itemTargetLabel_(it))}</span>` : ""}</span></li>`).join("")}</ol>`;
+}
+
+function contactBookCardHtml_(e, today, editable, viewer) {
+    const isToday = e.date === today;
+    const [y, m, d] = e.date.split("-");
+    const weekday = weekdayOf_(e.date) || e.weekday || "";
+    const id = escHtml_(e.id);
+    const tools = editable ? `
+        <div class="flex space-x-2 text-xs shrink-0">
+            <button onclick="openContactBookModal('${id}')" class="text-indigo-600 font-bold hover:underline">編輯</button>
+            <button onclick="deleteContactBookEntry('${id}')" class="text-rose-600 font-bold hover:underline">刪除</button>
+        </div>` : "";
+    return `
+        <div class="flex gap-3 border ${isToday ? 'border-indigo-300 bg-indigo-50/40' : 'border-slate-200 bg-white'} rounded-xl p-3">
+            <div class="shrink-0 w-16 text-center rounded-lg bg-indigo-50 py-1.5">
+                <div class="text-[10px] font-bold text-slate-400">${escHtml_(y)}</div>
+                <div class="text-base font-extrabold text-indigo-700 leading-tight">${escHtml_(m)}/${escHtml_(d)}</div>
+                <div class="text-[11px] font-bold text-slate-600">${escHtml_(weekday)}</div>
+            </div>
+            <div class="min-w-0 flex-1">
+                <div class="flex items-center justify-between gap-2 min-h-[1.25rem]">
+                    ${isToday ? '<span class="text-[10px] font-bold bg-indigo-600 text-white px-1.5 py-0.5 rounded">今天</span>' : '<span></span>'}
+                    ${tools}
+                </div>
+                ${contactBookItemsHtml_(e, viewer)}
+            </div>
+        </div>`;
+}
+
+function renderContactBookInto_(prefix, editable) {
+    const activeEl = document.getElementById(prefix + "ActiveList");
+    if (!activeEl) return;
+    const g = getContactBookGroups_(editable);
+    const viewer = editable ? undefined : contactBookViewer_();
+
+    activeEl.innerHTML = g.active.length
+        ? g.active.map(e => contactBookCardHtml_(e, g.today, editable, viewer)).join("")
+        : '<div class="text-center text-slate-400 text-xs font-bold py-6 border border-dashed border-slate-200 rounded-xl">今天與之後還沒有聯絡簿事項</div>';
+
+    document.getElementById(prefix + "ExpiredCount").innerText = `${g.expired.length} 筆`;
+    const open = !!contactBookExpiredOpen_[prefix];
+    document.getElementById(prefix + "ExpiredWrap").classList.toggle("hidden", !open);
+    document.getElementById(prefix + "ExpiredChevron").classList.toggle("rotate-180", open);
+
+    document.getElementById(prefix + "ExpiredList").innerHTML = g.expired.length
+        ? g.expired.map(e => contactBookCardHtml_(e, g.today, editable, viewer)).join("")
+        : `<div class="text-center text-slate-400 text-xs font-bold py-4">過去 ${CONTACT_BOOK_EXPIRED_DAYS} 天沒有聯絡簿事項</div>`;
+}
+
+function renderContactBook() {
+    renderContactBookInto_("tcb", true);   // 老師端：可新增／修改／刪除
+    renderContactBookInto_("scb", false);  // 學生端：唯讀
+}
+
+function toggleContactBookExpired(prefix) {
+    contactBookExpiredOpen_[prefix] = !contactBookExpiredOpen_[prefix];
+    renderContactBook();
+}
+
+function updateContactBookWeekday() {
+    const v = document.getElementById("contactBookDateInput").value;
+    document.getElementById("contactBookWeekdayText").innerText = (v && weekdayOf_(v)) || "—";
+}
+
+function openContactBookModal(id) {
+    const entry = id ? (window.appData.contactBook || []).find(x => x.id === id) : null;
+    document.getElementById("contactBookModalTitle").innerText = entry ? "修改聯絡簿" : "新增聯絡簿";
+    document.getElementById("contactBookEditId").value = entry ? entry.id : "";
+    document.getElementById("contactBookDateInput").value = entry ? entry.date : localDateStr_();
+    const items = entry ? entryItems_(entry) : [];
+    document.getElementById("contactBookItems").innerHTML = "";
+    const n = Math.max(4, items.length);
+    for (let i = 0; i < n; i++) { const it = items[i]; addContactBookItemRow_(it ? it.text : "", it ? it.targets : []); }
+    updateContactBookWeekday();
+    openModal("contactBookModal");
+}
+
+function renumberContactBookItems_() {
+    document.querySelectorAll("#contactBookItems .cb-item-no").forEach((el, i) => { el.innerText = (i + 1) + "."; });
+}
+function readCbTargets_(row) {
+    return [...row.querySelectorAll(".cb-gblock")].filter(b => b.querySelector(".cb-g").checked).map(b => ({
+        grade: b.dataset.grade,
+        schools: [...b.querySelectorAll(".cb-s:checked")].map(i => i.value)
+    })).filter(t => t.schools.length);
+}
+function refreshCbTargetLabel_(row) {
+    const targets = readCbTargets_(row);
+    const btn = row.querySelector(".cb-target-btn");
+    btn.innerHTML = `<i class="fa-solid fa-users mr-1"></i>${escHtml_(itemTargetLabel_({ targets }))}`;
+    btn.classList.toggle("bg-amber-100", targets.length > 0);
+}
+function addContactBookItemRow_(text, targets) {
+    targets = targets || [];
+    const wrap = document.getElementById("contactBookItems");
+    const row = document.createElement("div");
+    row.className = "cb-item-row";
+    const blocks = (window.appData.grades || []).map(g => {
+        const t = targets.find(x => x.grade === g);
+        const schools = [...new Set(cbSchoolsOfGrade_(g).concat(t ? t.schools : []))];
+        const chips = schools.length
+            ? schools.map(sc => `<label class="inline-flex items-center gap-1 border border-slate-200 rounded-lg px-2 py-1 bg-white cursor-pointer"><input type="checkbox" class="cb-s" value="${escHtml_(sc)}" ${t && t.schools.includes(sc) ? "checked" : ""}><span>${escHtml_(sc)}</span></label>`).join("")
+            : '<span class="text-slate-400">這個年級目前沒有學生</span>';
+        return `<div class="cb-gblock" data-grade="${escHtml_(g)}">
+            <label class="inline-flex items-center gap-1.5 font-bold text-slate-700 cursor-pointer"><input type="checkbox" class="cb-g" value="${escHtml_(g)}" ${t ? "checked" : ""}>${escHtml_(g)}</label>
+            <div class="cb-schools ${t ? "" : "hidden"} flex flex-wrap gap-1 mt-1 ml-5">${chips}</div></div>`;
+    }).join("");
+    row.innerHTML = `<div class="flex items-center gap-2">
+            <span class="cb-item-no shrink-0 w-6 text-right font-bold text-indigo-600"></span>
+            <input type="text" class="cb-item-input flex-1 min-w-0 border border-slate-300 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="例如：數學習作 P.30-32">
+            <button type="button" class="cb-target-btn shrink-0 max-w-[9rem] truncate border border-slate-200 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-600 whitespace-nowrap" title="這一項是給誰的"></button>
+            <button type="button" class="cb-del shrink-0 text-slate-400 hover:text-rose-500 p-1" title="移除這一項"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="cb-target-panel hidden ml-8 mt-1.5 p-2 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-[11px]">
+            <div class="font-bold text-slate-500">勾選年級，再勾選該年級要寫這項的學校（都不勾＝全體學生）</div>
+            ${blocks}
+        </div>`;
+    row.querySelector(".cb-item-input").value = text || "";
+    row.querySelector(".cb-del").onclick = () => { row.remove(); renumberContactBookItems_(); };
+    row.querySelector(".cb-target-btn").onclick = () => row.querySelector(".cb-target-panel").classList.toggle("hidden");
+    row.querySelectorAll(".cb-g").forEach(c => c.onchange = () => {
+        const box = c.closest(".cb-gblock");
+        box.querySelector(".cb-schools").classList.toggle("hidden", !c.checked);
+        if (c.checked && !box.querySelector(".cb-s:checked")) box.querySelectorAll(".cb-s").forEach(x => { x.checked = true; }); // 勾年級預設全選該年級學校
+        refreshCbTargetLabel_(row);
+    });
+    row.querySelectorAll(".cb-s").forEach(c => c.onchange = () => refreshCbTargetLabel_(row));
+    wrap.appendChild(row);
+    refreshCbTargetLabel_(row);
+    renumberContactBookItems_();
+}
+
+async function saveContactBookEntry() {
+    const id = document.getElementById("contactBookEditId").value;
+    const date = document.getElementById("contactBookDateInput").value;
+    const items = [...document.querySelectorAll("#contactBookItems .cb-item-row")].map(r => ({
+        text: r.querySelector(".cb-item-input").value.trim(),
+        targets: readCbTargets_(r)
+    })).filter(it => it.text);
+    const content = items.map((it, i) => `${i + 1}. ${it.text}`).join("\n");
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) { alert("請選擇日期！"); return; }
+    if (!content) { alert("請至少填寫一項進度內容！"); return; }
+
+    if (!Array.isArray(window.appData.contactBook)) window.appData.contactBook = [];
+    const weekday = weekdayOf_(date);
+    if (id) {
+        const entry = window.appData.contactBook.find(x => x.id === id);
+        if (!entry) { alert("找不到這筆聯絡簿，可能已被刪除。"); closeModal("contactBookModal"); return; }
+        entry.date = date;
+        entry.weekday = weekday;
+        entry.content = content;
+        entry.items = items;
+    } else {
+        window.appData.contactBook.push({
+            id: "cb_" + Date.now() + "_" + Math.random().toString(36).substr(2, 4),
+            date, weekday, content, items
+        });
+    }
+    closeModal("contactBookModal");
+    await window.saveData();
+}
+
+async function deleteContactBookEntry(id) {
+    const entry = (window.appData.contactBook || []).find(x => x.id === id);
+    if (!entry) return;
+    if (!confirm(`確定要刪除 ${entry.date} ${weekdayOf_(entry.date)} 的這筆聯絡簿嗎？`)) return;
+    window.appData.contactBook = window.appData.contactBook.filter(x => x.id !== id);
+    await window.saveData();
+}
+
+/* 老師端：上週／本週 KPI 名單與需要關懷名單 */
+function renderKpiOverview() {
+    const lastEl = document.getElementById("kpiLastWeekList");
+    const thisEl = document.getElementById("kpiThisWeekList");
+    const careEl = document.getElementById("kpiCareList");
+    if (!lastEl || !thisEl || !careEl) return;
+
+    const students = window.appData.students || [];
+    const basis = document.getElementById("careBasisSelect")?.value || "all";
+    const basisLabel = { all: "全部項目", this: "本週", last: "上週" }[basis] || "全部項目";
+
+    const row = (s, k) => `
+        <button type="button" onclick="openStudentPendingModal('${escHtml_(s.id)}')"
+            class="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-left hover:border-indigo-300 hover:bg-indigo-50/50 transition">
+            <span class="min-w-0 truncate text-xs font-bold text-slate-700">
+                ${s.school ? `<span class="text-slate-400 font-medium">${escHtml_(s.school)}</span> ` : ''}${escHtml_(s.name)}${isKpiFull_(k) ? ' 👑' : ''}
+            </span>
+            <span class="shrink-0 text-[11px] font-extrabold px-1.5 py-0.5 rounded ${kpiToneClass_(k)}">${kpiText_(k)}</span>
+        </button>`;
+
+    const byRateThenName = (a, b) => (b.k.rate - a.k.rate) || a.s.name.localeCompare(b.s.name, "zh-Hant");
+    const fill = (el, titleId, titleIcon, titleText, period, emptyText) => {
+        const list = students.map(s => ({ s, k: getStudentKpi(s.id, period) })).filter(x => x.k.total > 0).sort(byRateThenName);
+        document.getElementById(titleId).innerHTML =
+            `<i class="${titleIcon} mr-1.5"></i> ${titleText}（${getWeekLabel_(period === 'last' ? -1 : 0)}）<span class="ml-1 text-slate-400 font-medium">${list.length} 人</span>`;
+        el.innerHTML = list.length
+            ? list.map(x => row(x.s, x.k)).join("")
+            : `<div class="text-center text-slate-400 text-xs font-bold py-4">${emptyText}</div>`;
+    };
+    fill(lastEl, "kpiLastWeekTitle", "fa-solid fa-calendar-minus text-slate-500", "上週 KPI", "last", "上週沒有派發項目");
+    fill(thisEl, "kpiThisWeekTitle", "fa-solid fa-calendar-week text-indigo-500", "本週 KPI", "this", "本週還沒有派發項目");
+
+    const careList = students
+        .map(s => ({ s, k: getStudentKpi(s.id, basis) }))
+        .filter(x => x.k.total > 0 && x.k.rate < KPI_CARE_THRESHOLD)
+        .sort((a, b) => (a.k.rate - b.k.rate) || a.s.name.localeCompare(b.s.name, "zh-Hant"));
+    document.getElementById("kpiCareTitle").innerHTML =
+        `<i class="fa-solid fa-heart-pulse text-rose-500 mr-1.5"></i> 需要關懷（${basisLabel}低於 ${KPI_CARE_THRESHOLD}%）<span class="ml-1 text-rose-400 font-medium">${careList.length} 人</span>`;
+    careEl.innerHTML = careList.length
+        ? careList.map(x => row(x.s, x.k)).join("")
+        : `<div class="text-center text-emerald-600 text-xs font-bold py-4">目前沒有低於 ${KPI_CARE_THRESHOLD}% 的學生 🎉</div>`;
+}
+
+/* 點學生姓名：列出尚未完成（含已送出待審核）與待訂正的項目 */
+function openStudentPendingModal(studentId) {
+    const st = (window.appData.students || []).find(s => s.id === studentId);
+    if (!st) return;
+    const pending = (window.appData.tasks || [])
+        .filter(t => t.studentId === studentId && t.teacherStatus !== "已完成")
+        .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+
+    document.getElementById("studentPendingTitle").innerText =
+        `${[st.school, st.name].filter(Boolean).join(" ")}`;
+    document.getElementById("studentPendingSub").innerText =
+        `${[st.grade, st.className].filter(Boolean).join(" ")} ・ 尚未完成／待訂正共 ${pending.length} 項`;
+
+    const box = document.getElementById("studentPendingList");
+    box.innerHTML = pending.length ? pending.map(t => {
+        const isFix = t.teacherStatus === "待訂正";
+        const badge = isFix
+            ? '<span class="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">待訂正</span>'
+            : (t.pendingReview
+                ? '<span class="bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded font-bold">已送出待審核</span>'
+                : '<span class="bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded font-bold">未完成</span>');
+        return `
+            <div class="border border-slate-200 rounded-lg px-3 py-2 bg-slate-50/60">
+                <div class="flex items-center justify-between gap-2">
+                    <span class="font-bold text-slate-800 min-w-0 truncate">${escHtml_(t.title)}</span>
+                    ${badge}
+                </div>
+                <div class="text-[11px] text-slate-500 mt-0.5">${escHtml_(t.type)} ・ ${escHtml_(t.subject)} ・ 派發 ${escHtml_(t.date)}</div>
+            </div>`;
+    }).join("") : '<div class="text-center text-emerald-600 font-bold py-6">全部項目都已完成 🎉</div>';
+
+    openModal("studentPendingModal");
 }
 
 function renderSubjectCompletionRates() {
@@ -1646,6 +2510,7 @@ function renderTeacherTasksTable() {
     const studentFilter = document.getElementById("filterStudent")?.value || "all";
     const typeFilter = document.getElementById("filterType")?.value || "all";
     const statusFilter = document.getElementById("filterStatus")?.value || "all";
+    const timeFilter = readTimeFilter_("task");
 
     let tasks = [...window.appData.tasks];
 
@@ -1662,7 +2527,10 @@ function renderTeacherTasksTable() {
         if (gradeFilter !== "all" && student.grade !== gradeFilter) return false;
         if (studentFilter !== "all" && t.studentId !== studentFilter) return false;
         if (typeFilter !== "all" && t.type !== typeFilter) return false;
-        if (statusFilter !== "all" && t.teacherStatus !== statusFilter) return false;
+        if (statusFilter === "incomplete") {
+            if (t.teacherStatus === "已完成") return false;   // 未完成/待訂正：只要還沒審核通過
+        } else if (statusFilter !== "all" && t.teacherStatus !== statusFilter) return false;
+        if (!matchesTimeFilter_(t.date, timeFilter)) return false;
 
         if (keyword) {
             const matchName = student.name.toLowerCase().includes(keyword);
@@ -1674,16 +2542,17 @@ function renderTeacherTasksTable() {
         return true;
     });
 
-    // 依照審核狀態優先權自動排序（待審核/待訂正優先顯示）
-    const statusPriority = { "未完成": 1, "待訂正": 2, "已完成": 3 };
-    tasks.sort((a, b) => {
-        if (a.pendingReview && !b.pendingReview) return -1;
-        if (!a.pendingReview && b.pendingReview) return 1;
-        const pA = statusPriority[a.teacherStatus] || 99;
-        const pB = statusPriority[b.teacherStatus] || 99;
-        if (pA !== pB) return pA - pB;
-        return new Date(b.date) - new Date(a.date);
-    });
+    // 排序：待審核 → 未完成/待訂正 → 已完成；同組內依發布日期新到舊，再依年級由小到大，最後依學校
+    const reviewTier = t => t.pendingReview ? 0 : (t.teacherStatus === "已完成" ? 2 : 1);
+    const gradeList = window.appData.grades || [];
+    const studentOf = t => window.appData.students.find(s => s.id === t.studentId) || {};
+    const gradeRank = t => { const i = gradeList.indexOf(studentOf(t).grade); return i < 0 ? 9999 : i; };
+    const zh = (x, y) => String(x || "").localeCompare(String(y || ""), "zh-Hant", { numeric: true });
+    tasks.sort((a, b) =>
+        (reviewTier(a) - reviewTier(b)) ||
+        String(b.date || "").localeCompare(String(a.date || "")) ||
+        (gradeRank(a) - gradeRank(b)) ||
+        zh(studentOf(a).school, studentOf(b).school));
 
     visibleReviewIds = tasks.map(t => String(t.id));
 
@@ -1707,7 +2576,7 @@ function renderTeacherTasksTable() {
                     <input type="checkbox" class="review-cb rounded text-indigo-600" ${selectedReviewIds.has(String(t.id)) ? 'checked' : ''} onchange="toggleReviewSelect('${t.id}', this.checked, this)">
                 </td>
                 <td class="px-3 sm:px-4 py-3 font-bold text-slate-800 flex items-center gap-1.5">
-                    <span class="relative inline-block">${student.avatar || '👨‍🎓'}${isStudentAllCompleted(t.studentId) ? '<span class="absolute -top-2.5 -left-1.5 text-xs" title="100% 全數完成優良獎章！">👑</span>' : ''}</span>
+                    <span class="relative inline-block">${student.avatar || '👨‍🎓'}${isStudentAllCompleted(t.studentId) ? '<span class="absolute -top-2.5 -left-1.5 text-xs" title="100% 全數完成優良獎章！">👑</span>' : ''}${careIconHtml_(t.studentId, 'absolute -top-2.5 -left-1.5 text-xs')}</span>
                     <span>${student.name}</span>
                 </td>
                 <td class="px-3 sm:px-4 py-3 text-slate-500 text-xs">${fullClass}</td>
@@ -1804,7 +2673,63 @@ function applyTeacherStatus(task, newStatus) {
     task.studentChecked = (newStatus === '已完成');
 }
 
-/* 批次審核：一次存檔，成功同步後清除所有勾選 */
+/* 老師審核：只更新被審核的那幾筆（後端逐筆更新），不會把老師畫面上的整份資料存回去，
+   所以不會蓋掉學生剛送出的其他項目。成功後用後端回傳的最新 tasks 取代本機。 */
+async function teacherReviewPatch_(ids, status) {
+    const idStrs = ids.map(String);
+    // 先記下原狀，失敗時退回
+    const snapshot = {};
+    window.appData.tasks.forEach(t => {
+        if (idStrs.includes(String(t.id))) snapshot[String(t.id)] = { teacherStatus: t.teacherStatus, pendingReview: t.pendingReview, studentChecked: t.studentChecked };
+    });
+    window.appData.tasks.forEach(t => { if (snapshot[String(t.id)]) applyTeacherStatus(t, status); });
+    renderTeacherTasksTable(); // 先即時反映在畫面上
+
+    window._teacherPatching = true;
+    window._saveSeq++;
+    showBusy_("審核同步中，請稍候…");
+    let reviewed = false;
+    try {
+        const ops = [];
+        for (let i = 0; i < idStrs.length; i += 500) ops.push({ op: "teacherReview", status, ids: idStrs.slice(i, i + 500) });
+
+        const MAX_ATTEMPTS = 6;
+        let lastErr = null;
+        for (let i = 0; i < MAX_ATTEMPTS; i++) {
+            try {
+                const result = await gasPost_("patch", { token: authToken, ops });
+                if (result && result.status === "busy") {
+                    const e = new Error(result.message || "伺服器忙碌中");
+                    e.retryable = true;
+                    throw e;
+                }
+                if (!result || result.status !== "success") throw new Error((result && result.message) || "審核更新失敗");
+                if (Array.isArray(result.tasks)) window.appData.tasks = result.tasks;
+                reviewed = true;
+                return true;
+            } catch (e) {
+                lastErr = e;
+                if (e && e.unauthorized) break;
+                if (!_isRetryable(e)) break;
+                await _sleep(Math.min(1000 * Math.pow(2, i), 8000) + Math.random() * 1000);
+            }
+        }
+        // 失敗：退回原狀
+        hideBusy_();
+        window.appData.tasks.forEach(t => { const o = snapshot[String(t.id)]; if (o) Object.assign(t, o); });
+        renderTeacherTasksTable();
+        if (lastErr && lastErr.unauthorized) clearAuthAndLogout("登入已過期或沒有權限，請重新登入。");
+        else alert("審核尚未成功儲存，已退回原狀，請稍後再試一次。\n\n錯誤：" + ((lastErr && lastErr.message) || lastErr));
+        return false;
+    } finally {
+        window._teacherPatching = false;
+        window._saveSeq++;
+        hideBusy_();
+        if (reviewed) showDoneToast_("已審核完畢");   // 同步成功才提示
+    }
+}
+
+/* 批次審核：成功同步後清除所有勾選 */
 async function batchUpdateTaskStatus(newStatus) {
     const ids = Array.from(selectedReviewIds);
     if (ids.length === 0) {
@@ -1813,19 +2738,10 @@ async function batchUpdateTaskStatus(newStatus) {
     }
     if (!confirm(`確定將選取的 ${ids.length} 項設為「${newStatus}」嗎？`)) return;
 
-    const idSet = new Set(ids);
-    let changed = 0;
-    window.appData.tasks.forEach(t => {
-        if (idSet.has(String(t.id))) {
-            applyTeacherStatus(t, newStatus);
-            changed++;
-        }
-    });
-    if (changed === 0) return;
+    const existing = ids.filter(id => window.appData.tasks.some(t => String(t.id) === id));
+    if (existing.length === 0) return;
 
-    renderTeacherTasksTable(); // 先即時反映在畫面上
-
-    const ok = await window.saveData({ silentRender: true });
+    const ok = await teacherReviewPatch_(existing, newStatus);
     if (ok) {
         // 雲端同步完成後才清除打勾
         selectedReviewIds.clear();
@@ -1839,8 +2755,8 @@ async function updateTaskStatus(taskId, newStatus) {
     const task = window.appData.tasks.find(t => t.id === taskId);
     if (task) {
         // 已完成：保持打勾；未完成/待訂正：清除學生端打勾以便重新提交；一律清除待審核提示
-        applyTeacherStatus(task, newStatus);
-        await window.saveData();
+        const ok = await teacherReviewPatch_([taskId], newStatus);
+        if (ok) window.renderRoleView();
     }
 }
 
@@ -1854,8 +2770,10 @@ function renderDispatchManagement() {
     if (!hwList || !examList) return;
 
     const groups = {};
+    const dispatchTime = readTimeFilter_("dispatch");
     window.appData.tasks.forEach(t => {
         if (filterSubject !== "all" && t.subject !== filterSubject) return;
+        if (!matchesTimeFilter_(t.date, dispatchTime)) return;
         const key = `${t.type}_${t.subject}_${t.title}_${t.date}`;
         if (!groups[key]) {
             groups[key] = {
@@ -2025,7 +2943,7 @@ function renderSingleEditStudentCheckboxes(selectedIds = []) {
     container.innerHTML = window.appData.students.map(s => `
         <label class="flex items-center space-x-1.5 font-bold text-slate-700 cursor-pointer">
             <input type="checkbox" value="${s.id}" ${selectedIds.includes(s.id) ? 'checked' : ''} class="single-edit-st-cb rounded text-indigo-600">
-            <span>${s.name} (${s.grade})</span>
+            <span>${s.school ? `<span class="text-slate-400 font-medium">${s.school}</span> ` : ''}${s.name} (${s.grade})</span>
         </label>
     `).join('');
 }
@@ -2184,6 +3102,64 @@ async function confirmBatchEditDispatches() {
     await window.saveData();
 }
 
+const DEFAULT_STUDENT_PWD = "0000"; // 新增學生的預設密碼
+
+/* 學生管理排序：年級（依「科目與年級設定」裡的順序，一年級在前）→ 學校 → 班級 → 姓名，全部遞增 */
+// 下拉選單用：學校 學生姓名 年級
+function studentOptionLabel_(s) {
+    return [s.school, s.name, s.grade].filter(Boolean).join(" ");
+}
+
+function sortStudentsByGradeSchool_(list) {
+    const grades = window.appData.grades || [];
+    const rank = g => { const i = grades.indexOf(g); return i < 0 ? 9999 : i; };
+    const cmp = (a, b) => String(a || "").localeCompare(String(b || ""), "zh-Hant", { numeric: true });
+    return [...list].sort((a, b) =>
+        (rank(a.grade) - rank(b.grade)) ||
+        cmp(a.grade, b.grade) ||
+        cmp(a.school, b.school) ||
+        cmp(a.className, b.className) ||
+        cmp(a.name, b.name));
+}
+
+/* 頭像：同一年級用同一個頭像（依「科目與年級設定」裡的年級順序對應），編輯時也可以手動挑別的 */
+const AVATAR_OPTIONS = ["🦔", "🐻", "🐬", "🐱", "🐰", "🦊", "🐼", "🐯", "🦁", "🐸", "🐧", "🦉"];
+
+function gradeAvatar_(grade) {
+    const chosen = (window.appData.gradeAvatars || {})[grade];   // 老師在「年級選單設定」指定的
+    if (chosen) return chosen;
+    const i = (window.appData.grades || []).indexOf(grade);
+    return AVATAR_OPTIONS[(i < 0 ? 0 : i) % AVATAR_OPTIONS.length];
+}
+
+function renderAvatarPicker_(selected) {
+    document.getElementById("studentAvatarInput").value = selected;
+    document.getElementById("studentAvatarPicker").innerHTML = AVATAR_OPTIONS.map(a => `
+        <button type="button" onclick="pickStudentAvatar_('${a}')" data-avatar="${a}"
+            class="w-9 h-9 text-xl rounded-lg border transition ${a === selected ? 'border-indigo-500 bg-indigo-50 ring-2 ring-indigo-300' : 'border-slate-200 bg-white hover:bg-slate-50'}">${a}</button>`).join('');
+    const grade = document.getElementById("studentGradeInput").value;
+    document.getElementById("studentAvatarHint").innerText = grade ? `（${grade}對照頭像：${gradeAvatar_(grade)}）` : "";
+}
+
+function pickStudentAvatar_(a) { renderAvatarPicker_(a); }
+
+// 換年級時，頭像自動換成該年級的對照頭像
+function onStudentGradeChange_() {
+    renderAvatarPicker_(gradeAvatar_(document.getElementById("studentGradeInput").value));
+}
+
+// 老師指定某年級統一使用的頭像，並把該年級現有學生一起換掉
+async function setGradeAvatar_(grade, avatar) {
+    const members = (window.appData.students || []).filter(st => st.grade === grade);
+    if (members.length && !confirm(`要把「${grade}」的 ${members.length} 位學生頭像，統一換成 ${avatar} 嗎？`)) {
+        renderSubjectsAndGradesTags(); // 取消：選單退回原本的頭像
+        return;
+    }
+    window.appData.gradeAvatars = { ...(window.appData.gradeAvatars || {}), [grade]: avatar };
+    members.forEach(st => { st.avatar = avatar; });
+    await window.saveData();
+}
+
 /* 學生管理 */
 function renderStudentsCards() {
     const container = document.getElementById("studentCardsContainer");
@@ -2200,6 +3176,8 @@ function renderStudentsCards() {
         return true;
     });
 
+    students = sortStudentsByGradeSchool_(students);
+
     if (students.length === 0) {
         container.innerHTML = `<div class="col-span-full text-center py-8 text-slate-400 font-bold">無符合條件的學生資料</div>`;
         return;
@@ -2209,6 +3187,10 @@ function renderStudentsCards() {
         const isChecked = selectedStudentIds.has(s.id);
         const stTasks = window.appData.tasks.filter(t => t.studentId === s.id);
         const completedCount = stTasks.filter(t => t.teacherStatus === "已完成").length;
+        const kpiThis = getStudentKpi(s.id, 'this');
+        const kpiLast = getStudentKpi(s.id, 'last');
+        const kpiAll = getStudentKpi(s.id, 'all');
+        const pwdText = s.pwdPlain ? escHtml_(s.pwdPlain) : "";
 
         return `
             <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-indigo-300 transition space-y-3">
@@ -2218,15 +3200,16 @@ function renderStudentsCards() {
                         <div class="relative w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-xl">
                             ${s.avatar || '👨‍🎓'}
                             ${isStudentAllCompleted(s.id) ? '<span class="absolute -top-3 -left-2 text-base drop-shadow-md" title="100% 全數完成優良獎章！">👑</span>' : ''}
+                            ${careIconHtml_(s.id, 'absolute -top-3 -left-2 text-base drop-shadow-md')}
                         </div>
                         <div>
                             <h4 class="font-bold text-slate-800 text-sm sm:text-base">${s.name}</h4>
                             <p class="text-xs text-slate-400">${s.school} · ${s.grade} ${s.className || ''}</p>
                         </div>
                     </div>
-                    <span class="bg-indigo-50 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded-full font-mono">
-                        密碼: ${s.pwd}
-                    </span>
+                    ${pwdText
+                        ? `<span class="bg-indigo-50 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded-full font-mono" title="學生登入密碼">密碼: ${pwdText}</span>`
+                        : `<span class="bg-slate-100 text-slate-400 text-[10px] font-bold px-2 py-0.5 rounded-full" title="舊密碼無法還原，請到「編輯」重設密碼、按「全部密碼設為 0000」，或由學生自行修改一次後，這裡就會顯示">密碼: 請重設</span>`}
                 </div>
 
                 <div class="flex justify-between items-center text-xs text-slate-500 pt-2 border-t border-slate-100">
@@ -2234,6 +3217,23 @@ function renderStudentsCards() {
                     <div class="flex space-x-2">
                         <button onclick="openEditStudentModal('${s.id}')" class="text-indigo-600 font-bold hover:underline">編輯</button>
                         <button onclick="deleteStudent('${s.id}')" class="text-rose-600 font-bold hover:underline">刪除</button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-1.5 text-center">
+                    <div class="relative rounded-lg px-1 py-1.5 ${kpiToneClass_(kpiThis)}">
+                        ${isKpiFull_(kpiThis) ? '<span class="absolute -top-2 -right-1 text-sm drop-shadow" title="本週的項目全部完成！">👑</span>' : ''}
+                        <div class="text-[10px] font-bold opacity-80">本週</div>
+                        <div class="text-[11px] font-extrabold">${kpiText_(kpiThis)}</div>
+                    </div>
+                    <div class="relative rounded-lg px-1 py-1.5 ${kpiToneClass_(kpiLast)}">
+                        ${isKpiFull_(kpiLast) ? '<span class="absolute -top-2 -right-1 text-sm drop-shadow" title="上週的項目全部完成！">👑</span>' : ''}
+                        <div class="text-[10px] font-bold opacity-80">上週</div>
+                        <div class="text-[11px] font-extrabold">${kpiText_(kpiLast)}</div>
+                    </div>
+                    <div class="rounded-lg px-1 py-1.5 ${kpiToneClass_(kpiAll)}">
+                        <div class="text-[10px] font-bold opacity-80">全部項目</div>
+                        <div class="text-[11px] font-extrabold">${kpiText_(kpiAll)}</div>
                     </div>
                 </div>
             </div>
@@ -2269,10 +3269,12 @@ function openAddStudentModal() {
     document.getElementById("studentNameInput").value = "";
     document.getElementById("studentSchoolInput").value = "";
     document.getElementById("studentClassInput").value = "";
-    document.getElementById("studentPwdInput").value = Math.floor(1000 + Math.random() * 9000).toString();
+    document.getElementById("studentPwdInput").value = DEFAULT_STUDENT_PWD;
+    document.getElementById("studentPwdInput").placeholder = "4位數字";
 
     const gradeSelect = document.getElementById("studentGradeInput");
     gradeSelect.innerHTML = (window.appData.grades || []).map(g => `<option value="${g}">${g}</option>`).join('');
+    renderAvatarPicker_(gradeAvatar_(gradeSelect.value));
 
     openModal("studentModal");
 }
@@ -2286,11 +3288,14 @@ function openEditStudentModal(id) {
     document.getElementById("studentNameInput").value = student.name;
     document.getElementById("studentSchoolInput").value = student.school;
     document.getElementById("studentClassInput").value = student.className || "";
-    document.getElementById("studentPwdInput").value = student.pwd;
+    // 老師端看得到目前密碼；舊資料（只有雜湊）還原不了，留空＝不變更
+    document.getElementById("studentPwdInput").value = student.pwdPlain || "";
+    document.getElementById("studentPwdInput").placeholder = student.pwdPlain ? "4位數字" : "舊密碼無法還原，留空＝不變更";
 
     const gradeSelect = document.getElementById("studentGradeInput");
     gradeSelect.innerHTML = (window.appData.grades || []).map(g => `<option value="${g}">${g}</option>`).join('');
     gradeSelect.value = student.grade;
+    renderAvatarPicker_(student.avatar || gradeAvatar_(student.grade));
 
     openModal("studentModal");
 }
@@ -2306,12 +3311,22 @@ async function saveStudent() {
     const grade = document.getElementById("studentGradeInput").value;
     const className = document.getElementById("studentClassInput").value.trim();
     const pwd = document.getElementById("studentPwdInput").value.trim();
+    const avatar = document.getElementById("studentAvatarInput").value || gradeAvatar_(grade);
 
-    if (!name || !school || !pwd) {
-        alert("請完整填寫學生姓名、學校與密碼！");
+    if (!name || !school) {
+        alert("請完整填寫學生姓名與學校！");
+        return;
+    }
+    if (!id && !pwd) {
+        alert("新增學生請設定 4 位數登入密碼！");
+        return;
+    }
+    if (pwd && (pwd.length !== 4 || isNaN(pwd))) {
+        alert("密碼必須是 4 位數字！");
         return;
     }
 
+    let target = null;
     if (id) {
         const student = window.appData.students.find(s => s.id === id);
         if (student) {
@@ -2319,7 +3334,10 @@ async function saveStudent() {
             student.school = school;
             student.grade = grade;
             student.className = className;
-            student.pwd = pwd;
+            student.avatar = avatar;
+            // 沒改（或留空）就不帶密碼，後端會保留原本的密碼
+            student.pwd = (pwd && pwd !== (student.pwdPlain || "")) ? pwd : "";
+            target = student;
         }
     } else {
         const newStudent = {
@@ -2329,12 +3347,47 @@ async function saveStudent() {
             grade,
             className,
             pwd,
-            avatar: ["🦔", "🐻", "🐬"][Math.floor(Math.random() * 3)]
+            avatar
         };
         window.appData.students.push(newStudent);
+        target = newStudent;
     }
 
     closeModal("studentModal");
+    const ok = await window.saveData();
+    if (target) {
+        if (ok && pwd) target.pwdPlain = pwd; // 存檔成功才在老師端顯示新密碼
+        delete target.pwd;                    // 送出用的欄位不留在前端
+        if (ok) window.renderRoleView();
+    }
+}
+
+// 把「勾選的學生」登入密碼改成預設密碼（0000）
+async function resetSelectedStudentPwdsToDefault() {
+    const list = (window.appData.students || []).filter(st => selectedStudentIds.has(st.id));
+    if (!list.length) { alert("請先勾選要改成預設密碼的學生！"); return; }
+    if (!confirm(`確定要把選取的 ${list.length} 位學生的登入密碼改成預設密碼 ${DEFAULT_STUDENT_PWD} 嗎？\n（學生之後可自行改密碼；此動作無法復原）`)) return;
+    list.forEach(st => { st.pwd = DEFAULT_STUDENT_PWD; });
+    const ok = await window.saveData();
+    list.forEach(st => {
+        if (ok) st.pwdPlain = DEFAULT_STUDENT_PWD;
+        delete st.pwd;
+    });
+    if (ok) {
+        selectedStudentIds.clear();
+        alert(`已把 ${list.length} 位學生的密碼設為預設密碼 ${DEFAULT_STUDENT_PWD}。`);
+        window.renderRoleView();
+    } else {
+        alert("儲存失敗，密碼尚未變更，請稍後再試。");
+    }
+}
+
+// 把所有學生的頭像統一成各年級的對照頭像
+async function unifyGradeAvatars() {
+    const list = window.appData.students || [];
+    if (!list.length) { alert("目前沒有學生。"); return; }
+    if (!confirm(`要把全部 ${list.length} 位學生的頭像，統一成各年級的對照頭像嗎？\n（之前手動挑選的頭像會被取代）`)) return;
+    list.forEach(st => { st.avatar = gradeAvatar_(st.grade); });
     await window.saveData();
 }
 
@@ -2368,20 +3421,32 @@ async function saveBatchStudents() {
         return;
     }
 
+    const created = [];
     names.forEach(name => {
-        window.appData.students.push({
+        const pwd = DEFAULT_STUDENT_PWD;
+        const st = {
             id: "s_" + Date.now() + "_" + Math.random().toString(36).substr(2, 4),
             name,
             school,
             grade,
             className: "",
-            pwd: Math.floor(1000 + Math.random() * 9000).toString(),
-            avatar: ["🦔", "🐻", "🐬"][Math.floor(Math.random() * 3)]
-        });
+            pwd,
+            avatar: gradeAvatar_(grade)
+        };
+        window.appData.students.push(st);
+        created.push(st);
     });
 
     closeModal("batchAddStudentModal");
-    await window.saveData();
+    const ok = await window.saveData();
+    created.forEach(s => {
+        if (ok) s.pwdPlain = s.pwd; // 存檔成功才在老師端顯示
+        delete s.pwd;               // 送出用的欄位不留在前端
+    });
+    if (ok) {
+        window.renderRoleView();
+        alert(`已新增 ${created.length} 位學生，預設登入密碼都是 ${DEFAULT_STUDENT_PWD}。\n\n之後可以在「學生管理 → 編輯」修改密碼。`);
+    }
 }
 
 function batchChangeGradeModal() {
@@ -2400,7 +3465,7 @@ async function confirmBatchChangeGrade() {
     const targetGrade = document.getElementById("targetGradeSelect").value;
     selectedStudentIds.forEach(id => {
         const student = window.appData.students.find(s => s.id === id);
-        if (student) student.grade = targetGrade;
+        if (student) { student.grade = targetGrade; student.avatar = gradeAvatar_(targetGrade); }
     });
 
     selectedStudentIds.clear();
@@ -2431,6 +3496,9 @@ function renderSubjectsAndGradesTags() {
         gradeContainer.innerHTML = (window.appData.grades || []).map(g => `
             <span class="inline-flex items-center bg-slate-100 text-slate-700 px-3 py-1.5 rounded-xl text-xs font-bold border border-slate-200">
                 ${g}
+                <select onchange="setGradeAvatar_('${g}', this.value)" title="選擇${g}統一使用的頭像" class="ml-2 bg-white border border-slate-300 rounded-lg px-1 py-0.5 text-base leading-none">
+                    ${AVATAR_OPTIONS.map(a => `<option value="${a}" ${a === gradeAvatar_(g) ? 'selected' : ''}>${a}</option>`).join('')}
+                </select>
                 <button onclick="removeGrade('${g}')" class="ml-2 text-slate-400 hover:text-rose-500"><i class="fa-solid fa-xmark"></i></button>
             </span>
         `).join('');
@@ -2512,7 +3580,7 @@ function renderAssignTaskStudentCheckboxes() {
     container.innerHTML = window.appData.students.map(s => `
         <label class="flex items-center space-x-1.5 font-bold text-slate-700 cursor-pointer">
             <input type="checkbox" value="${s.id}" class="task-st-cb rounded text-indigo-600">
-            <span>${s.name} (${s.grade})</span>
+            <span>${s.school ? `<span class="text-slate-400 font-medium">${s.school}</span> ` : ''}${s.name} (${s.grade})</span>
         </label>
     `).join('');
 }
@@ -2642,10 +3710,14 @@ function openTeacherPwdModal() {
 async function saveTeacherPwd() {
     const pwd = document.getElementById("teacherNewPwd").value.trim();
     if (!pwd) return;
-    window.appData.teacherPwd = pwd;
+    _pendingTeacherPwdPlain = pwd;
     closeModal("teacherChangePwdModal");
-    await window.saveData();
-    alert("老師密碼已成功修改！");
+    const ok = await window.saveData();
+    if (ok) {
+        alert("老師密碼已成功修改！");
+    } else {
+        alert("密碼修改失敗，請稍後再試一次。");
+    }
 }
 
 function openStudentChangePwdModal() {
@@ -2667,12 +3739,24 @@ async function saveStudentSelfPwd() {
         return;
     }
 
-    const student = window.appData.students.find(s => s.id === loggedInStudentId);
-    if (student) {
-        student.pwd = p1;
-        closeModal("studentChangePwdModal");
-        await window.saveData();
-        alert("密碼已修改完成！");
+    if (!authToken) { alert("登入已過期，請重新登入。"); return; }
+    showBusy_("同步中，請稍候…");
+    try {
+        const result = await gasPost_("changePwd", { token: authToken, newPwd: p1 });
+        hideBusy_();
+        if (result && result.status === "success") {
+            closeModal("studentChangePwdModal");
+            showDoneToast_("密碼已修改完成");
+        } else {
+            alert("修改失敗：" + ((result && result.message) || "未知錯誤"));
+        }
+    } catch (e) {
+        hideBusy_();
+        if (e && e.unauthorized) {
+            clearAuthAndLogout("登入已過期或沒有權限，請重新登入。");
+        } else {
+            alert("修改密碼時發生錯誤：" + (e.message || e));
+        }
     }
 }
 
@@ -2692,6 +3776,33 @@ function renderStudentDashboard(student) {
     }
 
     renderStudentDashboardContent();
+}
+
+/* 學生端：本週／上週 KPI 卡片（該週項目全部完成就有皇冠） */
+function renderStudentKpiCards_(studentId) {
+    const fill = (elId, title, period, offset) => {
+        const el = document.getElementById(elId);
+        if (!el) return;
+        const k = getStudentKpi(studentId, period);
+        const full = isKpiFull_(k);
+        const tone = k.total === 0 ? "text-slate-400" : (k.rate >= KPI_CARE_THRESHOLD ? "text-emerald-600" : "text-amber-600");
+        const bar = k.total === 0 ? "bg-slate-200" : (k.rate >= KPI_CARE_THRESHOLD ? "bg-emerald-500" : "bg-amber-500");
+        el.innerHTML = `
+            ${full ? `<span class="absolute -top-3 right-3 text-2xl drop-shadow animate-bounce" title="${title}的項目全部完成！">👑</span>` : ""}
+            <div class="flex items-center justify-between gap-2">
+                <span class="text-xs font-bold text-slate-600"><i class="fa-solid fa-calendar-week text-indigo-500 mr-1"></i>${title}</span>
+                <span class="text-[10px] text-slate-400">${getWeekLabel_(offset)}</span>
+            </div>
+            <div class="mt-1.5 flex items-end justify-between gap-2">
+                <span class="text-xl sm:text-2xl font-extrabold ${tone}">${k.total ? `${k.completed}/${k.total}` : "—"}</span>
+                <span class="text-xs font-bold ${tone}">${k.total ? `${k.rate}% 完成` : "這週沒有項目"}</span>
+            </div>
+            <div class="mt-2 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div class="h-full ${bar}" style="width:${k.rate}%"></div>
+            </div>`;
+    };
+    fill("studentKpiThisCard", "本週 KPI", "this", 0);
+    fill("studentKpiLastCard", "上週 KPI", "last", -1);
 }
 
 /* 核心：學生端勾選與提示老師端處理 */
@@ -2719,20 +3830,37 @@ function renderStudentDashboardContent() {
     document.getElementById("studentExamStat").innerText = `${examCompleted}/${examTasks.length}`;
     document.getElementById("studentExamRateTag").innerText = `${examRate}% 完成`;
 
+    renderContactBook();
+
+    renderStudentKpiCards_(student.id);
+
     // 警告標章與皇冠獎章邏輯
     const isWarning = (hwTasks.length > 0 && hwRate < 80) || (examTasks.length > 0 && examRate < 80);
     document.getElementById("studentWarningBanner").classList.toggle("hidden", !isWarning);
 
     const isAllCompleted = isStudentAllCompleted(student.id);
     document.getElementById("crownBadge").classList.toggle("hidden", !isAllCompleted);
+    const careBadge = document.getElementById("careBadge");
+    const needsCare = isStudentNeedsCare_(student.id);
+    careBadge.classList.toggle("hidden", !needsCare);
+    if (needsCare) careBadge.title = `需要關懷：全部項目完成率 ${getStudentKpi(student.id, 'all').rate}%（低於 ${KPI_CARE_THRESHOLD}%）`;
 
     // 篩選個人項目列表
+    const studentTime = readTimeFilter_("st");
     let filteredTasks = allStudentTasks.filter(t => {
         if (selectedSubject !== "all" && t.subject !== selectedSubject) return false;
         if (selectedStatus === "completed" && t.teacherStatus !== "已完成") return false;
         if (selectedStatus === "incomplete" && t.teacherStatus === "已完成") return false;
+        if (!matchesTimeFilter_(t.date, studentTime)) return false;
         return true;
     });
+
+    // 排序：最上面是未完成，接著是待訂正，已完成的放在最下面（同一組維持原本順序）
+    const studentStatusRank = t => t.teacherStatus === "已完成" ? 3 : (t.teacherStatus === "待訂正" ? 2 : 1);
+    filteredTasks = filteredTasks
+        .map((t, i) => ({ t, i }))
+        .sort((a, b) => (studentStatusRank(a.t) - studentStatusRank(b.t)) || (a.i - b.i))
+        .map(x => x.t);
 
     const hwContainer = document.getElementById("homeworkListContainer");
     const examContainer = document.getElementById("examListContainer");
@@ -2867,65 +3995,82 @@ function updateStudentSubmitBar() {
     }
 }
 
-// 從 Google 試算表讀最新完整資料（空資料或錯誤一律丟出例外，絕不拿預設資料去覆蓋雲端）
+// 從 Google 試算表讀最新完整資料（依身分裁切：學生只會拿到自己的 tasks）
 async function fetchLatestAppData() {
-    const response = await fetch(GAS_URL + "?action=get&_t=" + Date.now(), {
-        method: "GET",
-        redirect: "follow",
-        cache: "no-store"
-    });
-    if (!response.ok) throw new Error("資料伺服器 HTTP " + response.status);
-    const result = await response.json();
-    if (!result || result.status === "error") throw new Error((result && result.message) || "雲端讀取失敗");
-    if (Object.keys(result).length === 0) throw new Error("雲端資料讀取為空，請稍後再試");
-    return normalizeAppData(result);
+    if (!authToken) throw new Error("尚未登入或登入已過期");
+    const result = await gasPost_("data", { token: authToken });
+    if (!result || result.status !== "success") throw new Error((result && result.message) || "雲端讀取失敗");
+    return normalizeAppData(result.data);
 }
 
-/* 先讀雲端最新資料，只把「這幾筆」變更套上去再存，避免蓋掉老師或別人剛做的操作 */
+/* 送出/撤回一律用後端的逐筆 patch，後端會自己判斷能不能改，不會互相蓋掉 */
 async function applyStudentChanges(changes) {
     if (!changes.length || studentSubmitting) return false;
+    if (!authToken || !loggedInStudentId) {
+        alert("登入已過期，請重新登入後再試一次。");
+        return false;
+    }
     studentSubmitting = true;
     updateStudentSubmitBar();
+    let doneMsg = "";
+    const onlyWithdraw = changes.every(c => !c.checked);
+    showBusy_(onlyWithdraw ? "撤回中，請稍候…" : "送出審核中，請稍候…");
     try {
         while (window.isSavePending()) await _sleep(200);
 
-        const fresh = await fetchLatestAppData();
-        const base = JSON.parse(JSON.stringify(fresh)); // 儲存失敗時用來還原畫面資料
+        const submitIds = changes.filter(c => c.checked).map(c => String(c.id));
+        const withdrawIds = changes.filter(c => !c.checked).map(c => String(c.id));
+        const ops = [];
+        if (submitIds.length) ops.push({ op: "studentSubmit", studentId: loggedInStudentId, ids: submitIds });
+        if (withdrawIds.length) ops.push({ op: "studentWithdraw", studentId: loggedInStudentId, ids: withdrawIds });
+        if (!ops.length) return false;
 
-        let submittedCount = 0;
-        changes.forEach(c => {
-            const t = fresh.tasks.find(x => String(x.id) === String(c.id));
-            if (!t || t.studentId !== loggedInStudentId) return; // 項目已被老師刪除
-            if (t.teacherStatus === "已完成") return;             // 老師已審核通過，不再更動
-            if (c.checked) {
-                t.studentChecked = true;
-                t.pendingReview = true;
-                submittedCount++;
-            } else {
-                t.studentChecked = false;
-                t.pendingReview = false;
+        const MAX_ATTEMPTS = 6;
+        let lastErr = null;
+        for (let i = 0; i < MAX_ATTEMPTS; i++) {
+            try {
+                const result = await gasPost_("patch", { token: authToken, ops: ops });
+                if (result && result.status === "busy") {
+                    const e = new Error(result.message || "伺服器忙碌中");
+                    e.retryable = true;
+                    throw e;
+                }
+                if (!result || result.status !== "success") {
+                    throw new Error((result && result.message) || "送出失敗");
+                }
+
+                window.appData.tasks = Array.isArray(result.tasks) ? result.tasks : window.appData.tasks;
+                changes.forEach(c => studentDraftChecks.delete(String(c.id)));
+                if (submitIds.length > 0 && typeof confetti === "function") {
+                    confetti({ particleCount: 40, spread: 70, origin: { y: 0.8 } });
+                }
+                doneMsg = onlyWithdraw ? "已撤回，可以重新勾選" : "已送出審核";
+                return true;
+            } catch (e) {
+                lastErr = e;
+                if (e && e.unauthorized) break;
+                if (!_isRetryable(e)) break;
+                const wait = Math.min(1000 * Math.pow(2, i), 8000) + Math.random() * 1000;
+                await _sleep(wait);
             }
-        });
+        }
 
-        window.appData = fresh;
-        const ok = await window.saveData({ silentRender: true });
-        if (!ok) {
-            window.appData = base; // 失敗：保留草稿，讓學生可以再按一次
+        if (lastErr && lastErr.unauthorized) {
+            hideBusy_();
+            clearAuthAndLogout("登入已過期或沒有權限，請重新登入。");
             return false;
         }
-
-        changes.forEach(c => studentDraftChecks.delete(String(c.id)));
-        if (submittedCount > 0 && typeof confetti === "function") {
-            confetti({ particleCount: 40, spread: 70, origin: { y: 0.8 } });
-        }
-        return true;
+        throw lastErr || new Error("送出失敗");
     } catch (e) {
         console.error("學生端送出失敗：", e);
+        hideBusy_();
         alert("送出失敗，請檢查網路後再按一次「送出審核」。\n\n勾選內容仍保留在畫面上。\n\n錯誤：" + (e.message || e));
         return false;
     } finally {
         studentSubmitting = false;
+        hideBusy_();
         renderStudentDashboardContent();
+        if (doneMsg) showDoneToast_(doneMsg);   // 同步成功才提示
     }
 }
 
@@ -2960,8 +4105,8 @@ async function pollStudentRealtimeData() {
         // 請求期間若有儲存或正在送出，這份雲端資料已過期，直接丟棄
         if (window.isSavePending() || window._saveSeq !== seqAtStart || studentSubmitting) return;
 
-        const before = JSON.stringify([window.appData.tasks, window.appData.students]);
-        const after = JSON.stringify([fresh.tasks, fresh.students]);
+        const before = JSON.stringify([window.appData.tasks, window.appData.students, window.appData.contactBook, window.appData.champions]);
+        const after = JSON.stringify([fresh.tasks, fresh.students, fresh.contactBook, fresh.champions]);
         window.appData = fresh;
 
         // 清掉已經過期的草稿（項目被刪、老師已審核、雲端狀態已與草稿相同）
@@ -2975,12 +4120,17 @@ async function pollStudentRealtimeData() {
         });
 
         if (before !== after || pruned) {
+            renderMarquee_();
             const stillExists = fresh.students.some(s => s.id === loggedInStudentId);
             if (stillExists) renderStudentDashboardContent();
             else window.renderRoleView();
         }
     } catch (e) {
-        console.warn("學生端定時同步暫時失敗：", e);
+        if (e && e.unauthorized) {
+            clearAuthAndLogout("登入已過期或沒有權限，請重新登入。");
+        } else {
+            console.warn("學生端定時同步暫時失敗：", e);
+        }
     } finally {
         studentRealtimeBusy = false;
     }
