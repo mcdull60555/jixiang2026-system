@@ -91,7 +91,7 @@
             </div>
 
             <!-- 狀態與切換區 -->
-            <div class="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
+            <div id="headerActions" class="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
                 <div id="userInfo" class="hidden sm:flex items-center bg-indigo-700/60 px-3 py-1.5 rounded-full text-xs text-indigo-100 border border-indigo-500/30">
                     <span id="roleBadge" class="bg-indigo-500 text-white px-2 py-0.5 rounded-full font-medium mr-2">家長/學生</span>
                     <span id="currentUserName">請先登入</span>
@@ -233,7 +233,7 @@
             </div>
 
             <!-- 控制頁籤與操作按鈕 -->
-            <div class="sticky top-14 sm:top-16 z-20 bg-white rounded-xl border border-slate-200 p-2 sm:p-4 shadow-sm flex flex-col lg:flex-row justify-between items-center gap-2 sm:gap-3">
+            <div class="sticky top-14 sm:static z-20 bg-white rounded-xl border border-slate-200 p-2 sm:p-4 shadow-sm flex flex-col lg:flex-row justify-between items-center gap-2 sm:gap-3">
                 <div class="grid grid-cols-6 sm:flex sm:flex-wrap gap-1 sm:gap-2 bg-slate-100 p-1 rounded-lg w-full lg:w-auto text-xs sm:text-sm">
                     <button id="tabTasksBtn" onclick="switchTeacherTab('tasks')" class="flex-1 md:flex-none px-1 sm:px-3 py-1.5 sm:py-2 font-bold rounded-md whitespace-nowrap bg-white text-indigo-600 shadow-sm">
                         <i class="fa-solid fa-tasks block sm:inline text-base sm:text-sm sm:mr-1"></i><span class="sm:hidden text-[11px] leading-tight">審核</span><span class="hidden sm:inline">進度審核</span>
@@ -1474,19 +1474,22 @@
         let badge = document.getElementById("teacherPendingReviewBadge");
         if (badge) return badge;
 
-        badge = document.createElement("div");
+        // 放在頁首（一直看得到、也不會蓋住表格或按鈕）
+        badge = document.createElement("button");
+        badge.type = "button";
         badge.id = "teacherPendingReviewBadge";
-        badge.className = "hidden fixed bottom-4 right-4 z-40 bg-amber-500 text-white px-4 py-2.5 rounded-xl shadow-lg font-bold text-sm cursor-pointer animate-pulse";
-        badge.innerHTML = '<i class="fa-solid fa-bell mr-2"></i><span id="teacherPendingReviewBadgeText">0 個待審核</span>';
+        badge.title = "前往進度審核";
+        badge.className = "hidden bg-amber-400 hover:bg-amber-300 text-amber-950 text-xs px-2.5 py-2 sm:py-1.5 rounded-lg font-bold transition flex items-center whitespace-nowrap shadow-sm animate-pulse";
+        badge.innerHTML = '<i class="fa-solid fa-bell sm:mr-1"></i><span id="teacherPendingReviewBadgeText" class="ml-1 sm:ml-0">0</span>';
         badge.onclick = () => {
             if (typeof switchTeacherTab === "function") switchTeacherTab("tasks");
-            badge.classList.add("hidden");
             setTimeout(() => {
-                const target = document.getElementById("teacherTaskTableBody");
-                target?.scrollIntoView({ behavior: "smooth", block: "start" });
+                const target = document.getElementById("teacherTasksTab");
+                if (target) window.scrollTo({ top: target.getBoundingClientRect().top + window.scrollY - 80, behavior: "smooth" });
             }, 100);
         };
-        document.body.appendChild(badge);
+        const host = document.getElementById("headerActions");
+        if (host) host.insertBefore(badge, host.firstChild); else document.body.appendChild(badge);
         return badge;
     }
 
@@ -1494,7 +1497,7 @@
         const badge = ensureTeacherPendingBadge();
         const count = pendingTasks.length;
         const text = document.getElementById("teacherPendingReviewBadgeText");
-        if (text) text.innerText = `${count} 個待審核`;
+        if (text) text.innerHTML = `${count}<span class="hidden sm:inline"> 個待審核</span>`;
         badge.classList.toggle("hidden", count === 0 || currentRole !== "teacher" || !isTeacherLoggedIn);
     }
 
