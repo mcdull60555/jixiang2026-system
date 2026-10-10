@@ -6,10 +6,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <!-- PWA 手機全螢幕與 Web App 支援 -->
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="theme-color" content="#4f46e5">
     <title>基翔小學通 - 雲端線上版</title>
-    <!-- 分頁小圖示：和左上角一樣（藍紫底、白框、雲朵） -->
+    <!-- 手機／平板：加入主畫面、分頁與書籤用的圖示（與左上角圖示相同） -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="apple-mobile-web-app-title" content="小學通">
+    <meta name="mobile-web-app-capable" content="yes">
+    <!-- 分頁小圖示（電腦）：和左上角一樣（藍紫底、白框、雲朵） -->
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%234f46e5'/><rect x='9' y='9' width='46' height='46' rx='11' fill='white'/><g transform='translate(14.5 19.5) scale(0.0578)'><path fill='%236366f1' d='M0 336c0 79.5 64.5 144 144 144h368c70.7 0 128-57.3 128-128 0-61.9-44-113.6-102.4-125.4 4.1-10.7 6.4-22.4 6.4-34.6 0-53-43-96-96-96-19.7 0-38.1 6-53.3 16.2C367 64.2 315.3 32 256 32c-88.4 0-160 71.6-160 160 0 2.7.1 5.4.2 8.1C40.2 219.8 0 273.2 0 336z'/></g></svg>">
     
     <!-- Tailwind CSS -->
@@ -50,21 +57,29 @@
                 font-size: 16px !important;
             }
         }
-    </style>
+    
+        /* 手機／平板：避免瀏覽器自動放大字體（Android 的 font boosting、iOS 橫向放大），版面才會照設計顯示 */
+        html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+        /* iPhone 瀏海／底部橫條的安全區 */
+        body { padding-bottom: env(safe-area-inset-bottom); }
+        /* 頁籤列在手機上可左右滑動時不顯示捲軸 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { scrollbar-width: none; }
+</style>
 </head>
 <body class="text-slate-800 min-h-screen flex flex-col select-none sm:select-auto">
 
     <!-- 頂部導覽列 -->
     <header class="bg-indigo-600 text-white shadow-md sticky top-0 z-30">
         <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between">
-            <div class="flex items-center space-x-2 sm:space-x-3">
-                <div class="bg-white text-indigo-600 p-1.5 sm:p-2 rounded-lg font-bold text-lg sm:text-xl shadow-inner">
+            <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
+                <div class="shrink-0 bg-white text-indigo-600 p-1.5 sm:p-2 rounded-lg font-bold text-lg sm:text-xl shadow-inner">
                     <i class="fa-solid fa-cloud text-indigo-500"></i>
                 </div>
                 <div>
-                    <h1 class="font-bold text-base sm:text-lg leading-tight flex items-center gap-1.5">
+                    <h1 class="font-bold text-base sm:text-lg leading-tight flex items-center gap-1.5 whitespace-nowrap">
                         基翔小學通 
-                        <span class="bg-emerald-500/80 text-[10px] px-1.5 py-0.5 rounded text-white font-normal">雲端同步版</span>
+                        <span class="hidden sm:inline bg-emerald-500/80 text-[10px] px-1.5 py-0.5 rounded text-white font-normal">雲端同步版</span>
                     </h1>
                     
                     <!-- 雲端連線狀態顯示條 -->
@@ -76,21 +91,21 @@
             </div>
 
             <!-- 狀態與切換區 -->
-            <div class="flex items-center space-x-1.5 sm:space-x-3">
+            <div class="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
                 <div id="userInfo" class="hidden sm:flex items-center bg-indigo-700/60 px-3 py-1.5 rounded-full text-xs text-indigo-100 border border-indigo-500/30">
                     <span id="roleBadge" class="bg-indigo-500 text-white px-2 py-0.5 rounded-full font-medium mr-2">家長/學生</span>
                     <span id="currentUserName">請先登入</span>
                 </div>
 
-                <button id="changeStudentPwdBtn" onclick="openStudentChangePwdModal()" class="hidden bg-indigo-500 hover:bg-indigo-400 text-white text-xs px-2 py-1.5 rounded-lg font-medium transition flex items-center">
-                    <i class="fa-solid fa-key mr-1"></i> 改密碼
+                <button id="changeStudentPwdBtn" onclick="openStudentChangePwdModal()" title="改密碼" class="hidden bg-indigo-500 hover:bg-indigo-400 text-white text-xs px-2.5 py-2 sm:py-1.5 rounded-lg font-medium transition flex items-center whitespace-nowrap">
+                    <i class="fa-solid fa-key sm:mr-1"></i><span class="hidden sm:inline"> 改密碼</span>
                 </button>
 
-                <button id="logoutBtn" onclick="logout()" class="hidden bg-rose-500 hover:bg-rose-400 text-white text-xs px-2 py-1.5 rounded-lg font-medium transition flex items-center">
-                    <i class="fa-solid fa-right-from-bracket mr-1"></i> 登出
+                <button id="logoutBtn" onclick="logout()" title="登出" class="hidden bg-rose-500 hover:bg-rose-400 text-white text-xs px-2.5 py-2 sm:py-1.5 rounded-lg font-medium transition flex items-center whitespace-nowrap">
+                    <i class="fa-solid fa-right-from-bracket sm:mr-1"></i><span class="hidden sm:inline"> 登出</span>
                 </button>
 
-                <button id="switchRoleBtn" onclick="handleRoleSwitch()" class="bg-white text-indigo-600 hover:bg-indigo-50 text-xs sm:text-sm px-2.5 sm:px-3.5 py-1.5 rounded-lg font-bold shadow-sm transition flex items-center">
+                <button id="switchRoleBtn" onclick="handleRoleSwitch()" class="bg-white text-indigo-600 hover:bg-indigo-50 text-xs sm:text-sm px-2.5 sm:px-3.5 py-2 sm:py-1.5 rounded-lg font-bold shadow-sm transition flex items-center whitespace-nowrap">
                     <i class="fa-solid fa-user-shield mr-1"></i>
                     <span id="switchBtnText">切換至老師端</span>
                 </button>
@@ -178,16 +193,16 @@
 
             <!-- 學生週 KPI 與關懷名單 -->
             <div class="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-sm space-y-4">
-                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-3">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-slate-100 pb-3">
                     <div>
                         <h3 class="font-bold text-slate-800 flex items-center text-sm sm:text-base">
                             <i class="fa-solid fa-bullseye text-indigo-600 mr-2"></i> 學生週 KPI 與關懷名單
                         </h3>
                         <p class="text-[11px] sm:text-xs text-slate-500">以派發日期落在該週（週一～週日）的項目計算，老師審核「已完成」才算完成。點學生姓名可查看尚未完成或待訂正的項目。</p>
                     </div>
-                    <div class="flex items-center space-x-2 w-full sm:w-auto">
+                    <div class="flex items-center space-x-2 w-full md:w-auto shrink-0">
                         <label class="text-xs font-bold text-slate-600 shrink-0">關懷依據：</label>
-                        <select id="careBasisSelect" onchange="renderKpiOverview()" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-auto">
+                        <select id="careBasisSelect" onchange="renderKpiOverview()" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full md:w-auto">
                             <option value="all">全部項目 KPI</option>
                             <option value="this">本週 KPI</option>
                             <option value="last">上週 KPI</option>
@@ -218,26 +233,26 @@
             </div>
 
             <!-- 控制頁籤與操作按鈕 -->
-            <div class="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 shadow-sm flex flex-col md:flex-row justify-between items-center gap-3">
-                <div class="flex flex-wrap gap-1 sm:gap-2 bg-slate-100 p-1 rounded-lg w-full md:w-auto text-xs sm:text-sm">
-                    <button id="tabTasksBtn" onclick="switchTeacherTab('tasks')" class="flex-1 md:flex-none px-3 py-2 font-bold rounded-md bg-white text-indigo-600 shadow-sm">
-                        <i class="fa-solid fa-tasks mr-1"></i> 進度審核
+            <div class="sticky top-14 sm:top-16 z-20 bg-white rounded-xl border border-slate-200 p-2 sm:p-4 shadow-sm flex flex-col lg:flex-row justify-between items-center gap-2 sm:gap-3">
+                <div class="grid grid-cols-5 sm:flex sm:flex-wrap gap-1 sm:gap-2 bg-slate-100 p-1 rounded-lg w-full lg:w-auto text-xs sm:text-sm">
+                    <button id="tabTasksBtn" onclick="switchTeacherTab('tasks')" class="flex-1 md:flex-none px-1 sm:px-3 py-1.5 sm:py-2 font-bold rounded-md whitespace-nowrap bg-white text-indigo-600 shadow-sm">
+                        <i class="fa-solid fa-tasks block sm:inline text-base sm:text-sm sm:mr-1"></i><span class="sm:hidden text-[11px] leading-tight">審核</span><span class="hidden sm:inline">進度審核</span>
                     </button>
-                    <button id="tabDispatchBtn" onclick="switchTeacherTab('dispatch')" class="flex-1 md:flex-none px-3 py-2 font-bold rounded-md text-slate-600 hover:text-slate-900">
-                        <i class="fa-solid fa-folder-tree mr-1"></i> 派發項目管理
+                    <button id="tabDispatchBtn" onclick="switchTeacherTab('dispatch')" class="flex-1 md:flex-none px-1 sm:px-3 py-1.5 sm:py-2 font-bold rounded-md whitespace-nowrap text-slate-600 hover:text-slate-900">
+                        <i class="fa-solid fa-folder-tree block sm:inline text-base sm:text-sm sm:mr-1"></i><span class="sm:hidden text-[11px] leading-tight">派發</span><span class="hidden sm:inline">派發項目管理</span>
                     </button>
-                    <button id="tabStudentsBtn" onclick="switchTeacherTab('students')" class="flex-1 md:flex-none px-3 py-2 font-bold rounded-md text-slate-600 hover:text-slate-900">
-                        <i class="fa-solid fa-user-gear mr-1"></i> 學生管理
+                    <button id="tabStudentsBtn" onclick="switchTeacherTab('students')" class="flex-1 md:flex-none px-1 sm:px-3 py-1.5 sm:py-2 font-bold rounded-md whitespace-nowrap text-slate-600 hover:text-slate-900">
+                        <i class="fa-solid fa-user-gear block sm:inline text-base sm:text-sm sm:mr-1"></i><span class="sm:hidden text-[11px] leading-tight">學生</span><span class="hidden sm:inline">學生管理</span>
                     </button>
-                    <button id="tabContactbookBtn" onclick="switchTeacherTab('contactbook')" class="flex-1 md:flex-none px-3 py-2 font-bold rounded-md text-slate-600 hover:text-slate-900">
-                        <i class="fa-solid fa-book-open-reader mr-1"></i> 電子聯絡簿
+                    <button id="tabContactbookBtn" onclick="switchTeacherTab('contactbook')" class="flex-1 md:flex-none px-1 sm:px-3 py-1.5 sm:py-2 font-bold rounded-md whitespace-nowrap text-slate-600 hover:text-slate-900">
+                        <i class="fa-solid fa-book-open-reader block sm:inline text-base sm:text-sm sm:mr-1"></i><span class="sm:hidden text-[11px] leading-tight">聯絡簿</span><span class="hidden sm:inline">電子聯絡簿</span>
                     </button>
-                    <button id="tabSubjectsBtn" onclick="switchTeacherTab('subjects')" class="flex-1 md:flex-none px-3 py-2 font-bold rounded-md text-slate-600 hover:text-slate-900">
-                        <i class="fa-solid fa-shapes mr-1"></i> 科目與年級設定
+                    <button id="tabSubjectsBtn" onclick="switchTeacherTab('subjects')" class="flex-1 md:flex-none px-1 sm:px-3 py-1.5 sm:py-2 font-bold rounded-md whitespace-nowrap text-slate-600 hover:text-slate-900">
+                        <i class="fa-solid fa-shapes block sm:inline text-base sm:text-sm sm:mr-1"></i><span class="sm:hidden text-[11px] leading-tight">設定</span><span class="hidden sm:inline">科目與年級設定</span>
                     </button>
                 </div>
 
-                <div class="flex items-center space-x-2 w-full md:w-auto justify-end">
+                <div class="flex items-center space-x-2 w-full lg:w-auto justify-end">
                     <button onclick="openTeacherPwdModal()" class="bg-slate-100 text-slate-600 hover:bg-slate-200 text-xs px-3 py-2 rounded-lg font-medium transition">
                         <i class="fa-solid fa-key mr-1"></i> 改老師密碼
                     </button>
@@ -254,8 +269,8 @@
                         <i class="fa-solid fa-list-check text-indigo-600 mr-2"></i> 全班進度管控與審核
                     </h3>
                     
-                    <div class="flex flex-wrap items-center gap-2 text-xs w-full md:w-auto">
-                        <div class="relative flex-1 sm:flex-none min-w-[130px]">
+                    <div class="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 text-xs w-full md:w-auto">
+                        <div class="relative col-span-2 sm:col-span-1 sm:flex-none min-w-[130px]">
                             <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
                             <input type="text" id="taskSearchKeyword" onkeyup="renderTeacherTasksTable()" placeholder="搜尋姓名/項目..." class="w-full pl-8 pr-2 py-1.5 border border-slate-300 rounded-lg text-slate-700 focus:outline-none">
                         </div>
@@ -287,7 +302,7 @@
                             <option value="month">本月</option>
                             <option value="custom">自訂區間…</option>
                         </select>
-                        <div id="taskTimeCustomBox" class="hidden items-center gap-1">
+                        <div id="taskTimeCustomBox" class="hidden col-span-2 items-center gap-1">
                             <input type="date" id="taskTimeFrom" onchange="onTimeFilterChange_('task')" class="bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-slate-700 font-bold" title="發布日期從">
                             <span class="text-slate-400">～</span>
                             <input type="date" id="taskTimeTo" onchange="onTimeFilterChange_('task')" class="bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-slate-700 font-bold" title="發布日期到">
@@ -309,18 +324,18 @@
                 </div>
 
                 <div class="overflow-x-auto custom-scrollbar">
-                    <table class="w-full text-left text-xs sm:text-sm whitespace-nowrap sm:whitespace-normal">
+                    <table class="w-full text-left text-xs sm:text-sm md:whitespace-nowrap lg:whitespace-normal">
                         <thead class="bg-slate-100 text-slate-600 text-[11px] sm:text-xs font-semibold uppercase">
                             <tr>
-                                <th class="px-3 sm:px-4 py-3 w-8"><input type="checkbox" id="reviewSelectAll" onchange="toggleSelectAllReview(this.checked)" class="rounded text-indigo-600" title="全選目前列表"></th>
+                                <th class="px-2 sm:px-4 py-3 w-8"><input type="checkbox" id="reviewSelectAll" onchange="toggleSelectAllReview(this.checked)" class="rounded text-indigo-600" title="全選目前列表"></th>
                                 <th class="px-3 sm:px-4 py-3">學生資訊</th>
-                                <th class="px-3 sm:px-4 py-3">學校/年級班級</th>
-                                <th class="px-3 sm:px-4 py-3">類型/科目</th>
+                                <th class="hidden md:table-cell px-3 sm:px-4 py-3">學校/年級班級</th>
+                                <th class="hidden md:table-cell px-3 sm:px-4 py-3">類型/科目</th>
                                 <th class="px-3 sm:px-4 py-3">項目名稱/範圍</th>
-                                <th class="px-3 sm:px-4 py-3">發布日期</th>
-                                <th class="px-3 sm:px-4 py-3">學生/家長勾選</th>
-                                <th class="px-3 sm:px-4 py-3">老師確認狀態</th>
-                                <th class="px-3 sm:px-4 py-3 text-right">修改狀態 / 操作</th>
+                                <th class="hidden md:table-cell px-3 sm:px-4 py-3">發布日期</th>
+                                <th class="hidden md:table-cell px-3 sm:px-4 py-3">學生/家長勾選</th>
+                                <th class="hidden md:table-cell px-3 sm:px-4 py-3">老師確認狀態</th>
+                                <th class="px-3 sm:px-4 py-3 text-right"><span class="hidden md:inline">修改狀態 / 操作</span><span class="md:hidden">審核</span></th>
                             </tr>
                         </thead>
                         <tbody id="teacherTaskTableBody" class="divide-y divide-slate-100"></tbody>
@@ -339,18 +354,18 @@
                             <p class="text-xs text-slate-500">100% 完成率項目會自動移至歸檔區；項目超過 120 天生命週期將自動清空，支援同步連動刪除</p>
                         </div>
 
-                        <div class="flex flex-wrap items-center gap-2 text-xs w-full md:w-auto">
+                        <div class="grid grid-cols-[auto_1fr] sm:flex sm:flex-wrap items-center gap-2 text-xs w-full md:w-auto">
                             <label class="font-bold text-slate-600">檢視模式：</label>
                             <select id="dispatchViewMode" onchange="renderDispatchManagement()" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 font-bold text-slate-700">
                                 <option value="active">進行中項目</option>
                                 <option value="archived">已歸檔項目 (100%完成)</option>
                             </select>
 
-                            <label class="font-bold text-slate-600 pl-2">篩選科目：</label>
+                            <label class="font-bold text-slate-600 sm:pl-2">篩選科目：</label>
                             <select id="dispatchSubjectFilter" onchange="renderDispatchManagement()" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 font-bold text-slate-700">
                                 <option value="all">所有科目</option>
                             </select>
-                            <select id="dispatchTimeFilter" onchange="onTimeFilterChange_('dispatch')" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 font-bold text-slate-700">
+                            <select id="dispatchTimeFilter" onchange="onTimeFilterChange_('dispatch')" class="col-span-2 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 font-bold text-slate-700">
                             <option value="all">發布時間：全部</option>
                             <option value="today">今天</option>
                             <option value="week">本週（週一～週日）</option>
@@ -359,18 +374,18 @@
                             <option value="month">本月</option>
                             <option value="custom">自訂區間…</option>
                         </select>
-                        <div id="dispatchTimeCustomBox" class="hidden items-center gap-1">
+                        <div id="dispatchTimeCustomBox" class="hidden col-span-2 items-center gap-1">
                             <input type="date" id="dispatchTimeFrom" onchange="onTimeFilterChange_('dispatch')" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 font-bold text-slate-700" title="發布日期從">
                             <span class="text-slate-400">～</span>
                             <input type="date" id="dispatchTimeTo" onchange="onTimeFilterChange_('dispatch')" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 font-bold text-slate-700" title="發布日期到">
                         </div>
 
-                            <div class="flex items-center space-x-1 pl-2 border-l border-slate-200">
-                                <button onclick="openBatchEditDispatchModal()" class="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg font-bold transition flex items-center shadow-sm">
+                            <div class="col-span-2 grid grid-cols-2 sm:flex items-center gap-1.5 sm:pl-2 sm:border-l border-slate-200">
+                                <button onclick="openBatchEditDispatchModal()" class="whitespace-nowrap justify-center bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg font-bold transition flex items-center shadow-sm">
                                     <i class="fa-solid fa-pen-to-square mr-1"></i> 批次修改所選
                                 </button>
-                                <button onclick="batchDeleteDispatches()" class="bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 rounded-lg font-bold transition flex items-center shadow-sm">
-                                    <i class="fa-solid fa-trash-can mr-1"></i> 批次刪除所選 (同步連動)
+                                <button onclick="batchDeleteDispatches()" class="whitespace-nowrap justify-center bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 rounded-lg font-bold transition flex items-center shadow-sm">
+                                    <i class="fa-solid fa-trash-can mr-1"></i> 批次刪除所選<span class="hidden sm:inline">&nbsp;(同步連動)</span>
                                 </button>
                             </div>
                         </div>
@@ -425,7 +440,7 @@
 
                 <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-col md:flex-row justify-between items-center gap-3">
                     <div class="flex flex-wrap items-center gap-2 w-full md:w-auto text-xs">
-                        <div class="relative flex-1 sm:flex-none min-w-[140px]">
+                        <div class="relative w-full sm:w-auto sm:flex-none min-w-[140px]">
                             <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
                             <input type="text" id="studentSearchKeyword" onkeyup="renderStudentsCards()" placeholder="搜尋姓名/學校..." class="w-full pl-8 pr-2 py-1.5 border border-slate-300 rounded-lg text-slate-700 focus:outline-none bg-white">
                         </div>
@@ -437,22 +452,22 @@
                         </select>
                     </div>
 
-                    <div class="flex items-center space-x-2 w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 pt-2 md:pt-0 border-slate-200 text-xs">
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-2 w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 pt-2 md:pt-0 border-slate-200 text-xs">
                         <label class="flex items-center space-x-1.5 cursor-pointer font-bold text-slate-700 select-none">
                             <input type="checkbox" id="selectAllStudentsCb" onchange="toggleSelectAllStudents(this.checked)" class="w-4 h-4 text-indigo-600 rounded">
                             <span>全選目前學生</span>
                         </label>
-                        <div class="flex items-center space-x-1">
-                            <button onclick="batchChangeGradeModal()" class="bg-amber-500 hover:bg-amber-600 text-white font-bold px-2.5 py-1.5 rounded-lg transition flex items-center">
+                        <div class="grid grid-cols-2 sm:flex sm:flex-wrap gap-1.5">
+                            <button onclick="batchChangeGradeModal()" class="whitespace-nowrap justify-center bg-amber-500 hover:bg-amber-600 text-white font-bold px-2.5 py-1.5 rounded-lg transition flex items-center">
                                 <i class="fa-solid fa-arrow-right-arrow-left mr-1"></i> 變更選取年級
                             </button>
-                            <button onclick="resetSelectedStudentPwdsToDefault()" title="勾選學生後，把登入密碼改成預設密碼 0000" class="bg-slate-600 hover:bg-slate-700 text-white font-bold px-2.5 py-1.5 rounded-lg transition flex items-center">
+                            <button onclick="resetSelectedStudentPwdsToDefault()" title="勾選學生後，把登入密碼改成預設密碼 0000" class="whitespace-nowrap justify-center bg-slate-600 hover:bg-slate-700 text-white font-bold px-2.5 py-1.5 rounded-lg transition flex items-center">
                                 <i class="fa-solid fa-key mr-1"></i> 預設密碼 <span class="ml-1 text-[10px] font-normal opacity-80">(0000)</span>
                             </button>
-                            <button onclick="unifyGradeAvatars()" title="把所有學生的頭像統一成各年級的對照頭像" class="bg-teal-600 hover:bg-teal-700 text-white font-bold px-2.5 py-1.5 rounded-lg transition flex items-center">
+                            <button onclick="unifyGradeAvatars()" title="把所有學生的頭像統一成各年級的對照頭像" class="whitespace-nowrap justify-center bg-teal-600 hover:bg-teal-700 text-white font-bold px-2.5 py-1.5 rounded-lg transition flex items-center">
                                 <i class="fa-solid fa-face-smile mr-1"></i> 統一年級頭像
                             </button>
-                            <button onclick="batchDeleteStudents()" class="bg-rose-600 hover:bg-rose-700 text-white font-bold px-2.5 py-1.5 rounded-lg transition flex items-center">
+                            <button onclick="batchDeleteStudents()" class="whitespace-nowrap justify-center bg-rose-600 hover:bg-rose-700 text-white font-bold px-2.5 py-1.5 rounded-lg transition flex items-center">
                                 <i class="fa-solid fa-trash mr-1"></i> 刪除所選
                             </button>
                         </div>
@@ -469,7 +484,7 @@
                         <h3 class="font-bold text-slate-800 text-sm sm:text-base flex items-center">
                             <i class="fa-solid fa-book-open-reader text-indigo-600 mr-2"></i> 電子聯絡簿
                         </h3>
-                        <p class="text-[11px] sm:text-xs text-slate-500">今天與之後的事項顯示在上方；日期已過的會收進下方「過期聯絡簿」，點開可查看過去 7 天。學生與家長登入後可以看到。</p>
+                        <p class="text-[11px] sm:text-xs text-slate-500">今天與之後的事項顯示在上方；日期已過的會收進下方「過期聯絡簿」，點開可查看過去 10 天（超過 10 天會自動刪除）。學生與家長登入後可以看到。</p>
                     </div>
                     <button onclick="openContactBookModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm px-3.5 py-2 rounded-lg font-bold shadow-sm transition flex items-center shrink-0">
                         <i class="fa-solid fa-plus mr-1"></i> 新增聯絡簿
@@ -480,7 +495,7 @@
 
                 <div class="border border-slate-200 rounded-xl overflow-hidden">
                     <button type="button" onclick="toggleContactBookExpired('tcb')" class="w-full flex items-center justify-between px-3 py-2.5 bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-600 transition">
-                        <span><i class="fa-solid fa-clock-rotate-left mr-1.5"></i> 過期聯絡簿（過去 10 天，超過自動刪除）<span id="tcbExpiredCount" class="ml-1.5 bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full text-[10px]">0 筆</span></span>
+                        <span><i class="fa-solid fa-clock-rotate-left mr-1.5"></i> 過期聯絡簿（過去 10 天，超過自動刪除）<span id="tcbExpiredCount" class="ml-1.5 whitespace-nowrap bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full text-[10px]">0 筆</span></span>
                         <i id="tcbExpiredChevron" class="fa-solid fa-chevron-down transition-transform"></i>
                     </button>
                     <div id="tcbExpiredWrap" class="hidden p-3 space-y-2 border-t border-slate-200">
@@ -590,7 +605,7 @@
 
                 <div class="border border-slate-200 rounded-xl overflow-hidden">
                     <button type="button" onclick="toggleContactBookExpired('scb')" class="w-full flex items-center justify-between px-3 py-2.5 bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-600 transition">
-                        <span><i class="fa-solid fa-clock-rotate-left mr-1.5"></i> 過期聯絡簿（過去 10 天，超過自動刪除）<span id="scbExpiredCount" class="ml-1.5 bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full text-[10px]">0 筆</span></span>
+                        <span><i class="fa-solid fa-clock-rotate-left mr-1.5"></i> 過期聯絡簿（過去 10 天，超過自動刪除）<span id="scbExpiredCount" class="ml-1.5 whitespace-nowrap bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full text-[10px]">0 筆</span></span>
                         <i id="scbExpiredChevron" class="fa-solid fa-chevron-down transition-transform"></i>
                     </button>
                     <div id="scbExpiredWrap" class="hidden p-3 space-y-2 border-t border-slate-200">
@@ -607,7 +622,7 @@
                             <option value="all">所有科目</option>
                         </select>
                     </div>
-                    <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+                    <div class="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full sm:w-auto sm:justify-end">
                         <select id="stTimeFilter" onchange="onTimeFilterChange_('st')" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700">
                             <option value="all">發布時間：全部</option>
                             <option value="today">今天</option>
@@ -617,7 +632,7 @@
                             <option value="month">本月</option>
                             <option value="custom">自訂區間…</option>
                         </select>
-                        <div id="stTimeCustomBox" class="hidden items-center gap-1">
+                        <div id="stTimeCustomBox" class="hidden col-span-2 items-center gap-1">
                             <input type="date" id="stTimeFrom" onchange="onTimeFilterChange_('st')" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700" title="發布日期從">
                             <span class="text-slate-400">～</span>
                             <input type="date" id="stTimeTo" onchange="onTimeFilterChange_('st')" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700" title="發布日期到">
@@ -1410,7 +1425,7 @@
 
         badge = document.createElement("div");
         badge.id = "teacherPendingReviewBadge";
-        badge.className = "hidden fixed top-20 right-4 z-[9998] bg-amber-500 text-white px-4 py-2.5 rounded-xl shadow-lg font-bold text-sm cursor-pointer animate-pulse";
+        badge.className = "hidden fixed bottom-4 right-4 z-40 bg-amber-500 text-white px-4 py-2.5 rounded-xl shadow-lg font-bold text-sm cursor-pointer animate-pulse";
         badge.innerHTML = '<i class="fa-solid fa-bell mr-2"></i><span id="teacherPendingReviewBadgeText">0 個待審核</span>';
         badge.onclick = () => {
             if (typeof switchTeacherTab === "function") switchTeacherTab("tasks");
@@ -1781,6 +1796,8 @@ function logoutStudent() {
 
 function renderRoleView() {
     renderMarquee_();
+    // 不是老師登入時，右下角「N 個待審核」一定要收起來（例如登出後換學生登入）
+    if (!(currentRole === "teacher" && isTeacherLoggedIn)) document.getElementById("teacherPendingReviewBadge")?.classList.add("hidden");
     updateStudentSubmitBar();
     const switchBtnText = document.getElementById("switchBtnText");
     const roleBadge = document.getElementById("roleBadge");
@@ -2338,7 +2355,11 @@ function addContactBookItemRow_(text, targets) {
             ${blocks}
         </div>`;
     row.querySelector(".cb-item-input").value = text || "";
-    row.querySelector(".cb-del").onclick = () => { row.remove(); renumberContactBookItems_(); };
+    row.querySelector(".cb-del").onclick = () => {
+        const t = row.querySelector(".cb-item-input").value.trim();
+        if (!confirm(t ? `確定要移除「${t}」這一項嗎？` : "確定要移除這一項嗎？")) return;
+        row.remove(); renumberContactBookItems_();
+    };
     row.querySelector(".cb-target-btn").onclick = () => row.querySelector(".cb-target-panel").classList.toggle("hidden");
     row.querySelectorAll(".cb-g").forEach(c => c.onchange = () => {
         const box = c.closest(".cb-gblock");
@@ -2634,39 +2655,44 @@ function renderTeacherTasksTable() {
 
         return `
             <tr class="hover:bg-slate-50/80 transition border-b border-slate-100 ${selectedReviewIds.has(String(t.id)) ? 'bg-indigo-50' : (t.pendingReview ? 'bg-amber-50/60' : '')}">
-                <td class="px-3 sm:px-4 py-3">
+                <td class="px-2 sm:px-4 py-3">
                     <input type="checkbox" class="review-cb rounded text-indigo-600" ${selectedReviewIds.has(String(t.id)) ? 'checked' : ''} onchange="toggleReviewSelect('${t.id}', this.checked, this)">
                 </td>
-                <td class="px-3 sm:px-4 py-3 font-bold text-slate-800 flex items-center gap-1.5">
+                <td class="px-2 sm:px-4 py-3 font-bold text-slate-800">
+                    <div class="flex items-center gap-1.5">
                     <span class="relative inline-block">${student.avatar || '👨‍🎓'}${isStudentAllCompleted(t.studentId) ? '<span class="absolute -top-2.5 -left-1.5 text-xs" title="100% 全數完成優良獎章！">👑</span>' : ''}${careIconHtml_(t.studentId, 'absolute -top-2.5 -left-1.5 text-xs')}</span>
                     <span>${escHtml_(student.name)}</span>
+                    </div>
+                    <div class="md:hidden text-[10px] font-normal text-slate-400 mt-0.5">${fullClass}</div>
                 </td>
-                <td class="px-3 sm:px-4 py-3 text-slate-500 text-xs">${fullClass}</td>
-                <td class="px-3 sm:px-4 py-3 font-semibold">
+                <td class="hidden md:table-cell px-3 sm:px-4 py-3 text-slate-500 text-xs">${fullClass}</td>
+                <td class="hidden md:table-cell px-3 sm:px-4 py-3 font-semibold">
                     <span class="${t.type === '作業' ? 'text-blue-600 bg-blue-50' : 'text-purple-600 bg-purple-50'} px-2 py-0.5 rounded text-xs">
                         ${escHtml_(t.type)} - ${escHtml_(t.subject)}
                     </span>
                 </td>
-                <td class="px-3 sm:px-4 py-3 font-bold text-slate-700">
+                <td class="px-2 sm:px-4 py-3 font-bold text-slate-700">
+                    <div class="md:hidden mb-0.5"><span class="${t.type === '作業' ? 'text-blue-600 bg-blue-50' : 'text-purple-600 bg-purple-50'} px-1.5 py-0.5 rounded text-[10px]">${escHtml_(t.type)} - ${escHtml_(t.subject)}</span></div>
                     ${escHtml_(t.title)}
-                    ${t.pendingReview ? `<span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-500 text-white animate-pulse"><i class="fa-solid fa-bell mr-1"></i>待審核</span>` : ''}
+                    ${t.pendingReview ? `<span class="md:ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-500 text-white animate-pulse whitespace-nowrap"><i class="fa-solid fa-bell mr-1"></i>待審核</span>` : ''}
+                    <div class="md:hidden text-[10px] font-normal text-slate-400 mt-0.5">${escHtml_(t.date)} · ${t.studentChecked ? '<span class="text-emerald-600">已勾選</span>' : '未勾選'}</div>
                 </td>
-                <td class="px-3 sm:px-4 py-3 text-slate-500 text-xs font-mono">${t.date}</td>
-                <td class="px-3 sm:px-4 py-3">
+                <td class="hidden md:table-cell px-3 sm:px-4 py-3 text-slate-500 text-xs font-mono">${t.date}</td>
+                <td class="hidden md:table-cell px-3 sm:px-4 py-3">
                     ${t.studentChecked ? 
                         `<span class="inline-flex items-center text-emerald-600 font-bold text-xs"><i class="fa-solid fa-circle-check mr-1"></i> 已勾選</span>` : 
                         `<span class="inline-flex items-center text-slate-400 text-xs"><i class="fa-regular fa-circle mr-1"></i> 未勾選</span>`}
                 </td>
-                <td class="px-3 sm:px-4 py-3">
+                <td class="hidden md:table-cell px-3 sm:px-4 py-3">
                     <span class="inline-block px-2.5 py-1 rounded-lg text-xs font-bold border ${statusBadgeClass}">
                         ${t.teacherStatus}
                     </span>
                 </td>
-                <td class="px-3 sm:px-4 py-3 text-right">
-                    <div class="inline-flex rounded-lg shadow-sm border border-slate-200 bg-white p-0.5" role="group">
-                        <button onclick="updateTaskStatus('${t.id}', '未完成')" class="px-2 py-1 text-xs font-bold rounded ${t.teacherStatus === '未完成' ? 'bg-amber-500 text-white' : 'text-slate-600 hover:bg-slate-100'}">未完成</button>
-                        <button onclick="updateTaskStatus('${t.id}', '待訂正')" class="px-2 py-1 text-xs font-bold rounded ${t.teacherStatus === '待訂正' ? 'bg-rose-500 text-white' : 'text-slate-600 hover:bg-slate-100'}">待訂正</button>
-                        <button onclick="updateTaskStatus('${t.id}', '已完成')" class="px-2 py-1 text-xs font-bold rounded ${t.teacherStatus === '已完成' ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-100'}">已完成</button>
+                <td class="px-2 sm:px-4 py-3 text-right">
+                    <div class="inline-flex flex-col md:flex-row rounded-lg shadow-sm border border-slate-200 bg-white p-0.5" role="group">
+                        <button onclick="updateTaskStatus('${t.id}', '未完成')" class="whitespace-nowrap px-2 py-1.5 md:py-1 text-xs font-bold rounded ${t.teacherStatus === '未完成' ? 'bg-amber-500 text-white' : 'text-slate-600 hover:bg-slate-100'}">未完成</button>
+                        <button onclick="updateTaskStatus('${t.id}', '待訂正')" class="whitespace-nowrap px-2 py-1.5 md:py-1 text-xs font-bold rounded ${t.teacherStatus === '待訂正' ? 'bg-rose-500 text-white' : 'text-slate-600 hover:bg-slate-100'}">待訂正</button>
+                        <button onclick="updateTaskStatus('${t.id}', '已完成')" class="whitespace-nowrap px-2 py-1.5 md:py-1 text-xs font-bold rounded ${t.teacherStatus === '已完成' ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-100'}">已完成</button>
                     </div>
                 </td>
             </tr>
@@ -3741,6 +3767,7 @@ function removeDynamicTaskRow(rowId) {
         alert("至少需要保留一項派發項目！");
         return;
     }
+    if (!confirm("確定要移除這一列派發項目嗎？")) return;
     document.getElementById(rowId)?.remove();
 }
 
