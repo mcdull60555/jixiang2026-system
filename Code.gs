@@ -30,7 +30,7 @@
  */
 
 // 後端版本：用瀏覽器開 /exec 網址可看到，確認部署的是新版
-const BACKEND_VERSION = "2026-10-10-v6-submit-log";
+const BACKEND_VERSION = "2026-10-10-v7-resubmit";
 const SUBMIT_LOG_KEEP_DAYS = 120;   // 送審／審核紀錄保留天數（和作業 120 天生命週期一致）
 const SUBMIT_LOG_MAX = 3000;        // 最多保留筆數，避免試算表過大
 const CONTACT_BOOK_KEEP_DAYS = 10; // 聯絡簿日期超過這麼多天就自動刪除
@@ -419,6 +419,21 @@ function purgeContactBookStored_() {
   }
 }
 
+// 舊資料沒有 reviewedAt：用送審紀錄裡最近一次審核時間補上（只影響回傳的畫面資料）
+function withReviewedAt_(tasks, log) {
+  const last = {};
+  (Array.isArray(log) ? log : []).forEach(function (e) {
+    if (e && e.action === "review" && e.taskId && (!last[e.taskId] || e.at > last[e.taskId])) last[e.taskId] = e.at;
+  });
+  return tasks.map(function (t) {
+    if (t.reviewedAt || !last[String(t.id)]) return t;
+    const c = {};
+    Object.keys(t).forEach(function (k) { c[k] = t[k]; });
+    c.reviewedAt = last[String(t.id)];
+    return c;
+  });
+}
+
 function teacherView_(data) {
   const o = {};
   Object.keys(data).forEach(function (k) { if (k !== "teacherPwd") o[k] = data[k]; });
@@ -430,6 +445,7 @@ function teacherView_(data) {
   });
   o.contactBook = contactBookKeep_(o.contactBook, new Date());
   o.submitLog = trimSubmitLog_(data.submitLog, new Date());
+  o.tasks = withReviewedAt_(data.tasks || [], data.submitLog);
   o.champions = computeChampions_(data, new Date());
   return o;
 }
@@ -466,7 +482,7 @@ function studentView_(data, studentId) {
     subjects: data.subjects,
     grades: data.grades,
     students: [stripStudent_(me)],
-    tasks: data.tasks.filter(function (t) { return t.studentId === studentId; }),
+    tasks: withReviewedAt_(data.tasks.filter(function (t) { return t.studentId === studentId; }), data.submitLog),
     contactBook: contactBookForStudent_(data.contactBook, me, new Date()),
     champions: computeChampions_(data, new Date())
   };
@@ -826,7 +842,7 @@ function handleChangePwd_(e) {
  * 回傳 { status, changed, skipped, tasks }；學生憑證的 tasks 只含自己的項目。
  * ================================================================== */
 const REVIEW_STATUSES = ["未完成", "待訂正", "已完成"];
-const TASK_PROGRESS_FIELDS = ["studentChecked", "pendingReview", "teacherStatus", "submittedAt", "doneAt"];
+const TASK_PROGRESS_FIELDS = ["studentChecked", "pendingReview", "teacherStatus", "submittedAt", "doneAt", "reviewedAt"];
 const MAX_PATCH_OPS = 50;
 const MAX_PATCH_IDS = 500;
 
@@ -935,7 +951,11 @@ function applyPatchOps_(data, ops) {
           pendingReview: false,
           studentChecked: op.status === "已完成"
         });
-        if (didChange) { changed++; pushSubmitLog_(data, task, "review", { status: op.status }); }
+        if (didChange) {
+          changed++;
+          task.reviewedAt = new Date().toISOString(); // 老師最近一次審核（含未完成／待訂正）的時間
+          pushSubmitLog_(data, task, "review", { status: op.status });
+        }
         // 記下審核通過的時間（跑馬燈排序用）；改成其他狀態就清掉
         if (op.status === "已完成" && !wasDone) task.doneAt = new Date().toISOString();
         else if (op.status !== "已完成") delete task.doneAt;
@@ -979,9 +999,9 @@ function handlePatch_(e) {
     const result = applyPatchOps_(data, ops);
     if (result.changed > 0) writeStoredJson_(JSON.stringify(data));
 
-    const tasks = session.role === "teacher"
+    const tasks = withReviewedAt_(session.role === "teacher"
       ? data.tasks
-      : data.tasks.filter(function (t) { return t.studentId === session.studentId; });
+      : data.tasks.filter(function (t) { return t.studentId === session.studentId; }), data.submitLog);
 
     return jsonResponse_({
       status: "success",

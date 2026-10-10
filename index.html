@@ -1989,8 +1989,8 @@ function populateTeacherFilterDropdowns() {
     if (stSelect) {
         const curSt = stSelect.value;
         stSelect.innerHTML = `<option value="all">所有學生</option>` +
-            window.appData.students.map(s => `<option value="${escHtml_(s.id)}">${escHtml_(s.name)}</option>`).join('');
-        stSelect.value = curSt || "all";
+            sortStudentsByGradeSchool_(window.appData.students).map(s => `<option value="${escHtml_(s.id)}">${escHtml_(studentOptionLabel_(s))}</option>`).join('');
+        stSelect.value = [...stSelect.options].some(o => o.value === curSt) ? curSt : "all";
     }
 
     const rateStSelect = document.getElementById("completionRateStudentSelect");
@@ -2852,8 +2852,16 @@ function renderTeacherTasksTable() {
 }
 
 /* 項目的時間戳記：送出審核時間、審核完成時間（台灣時間） */
+// 老師審核為「未完成／待訂正」、學生還沒重新送出 → 需重新送審
+function needsResubmit_(t) {
+    return !!t && !t.pendingReview && !!t.reviewedAt && (t.teacherStatus === "未完成" || t.teacherStatus === "待訂正");
+}
+function resubmitNoteHtml_(t, short) {
+    if (!needsResubmit_(t)) return "";
+    return `<div class="text-[10px] font-bold text-rose-600 mt-1 whitespace-nowrap"><i class="fa-solid fa-rotate-right mr-1"></i>審核 ${fmtTs_(t.reviewedAt, short)}・需重新送審</div>`;
+}
 function taskTimeNoteHtml_(t) {
-    const out = [];
+    const out = [resubmitNoteHtml_(t, true)];
     if (t.submittedAt && (t.pendingReview || t.teacherStatus === "已完成")) out.push(`<div class="text-[10px] font-normal text-sky-600 mt-1 whitespace-nowrap"><i class="fa-solid fa-paper-plane mr-1"></i>送審 ${fmtTs_(t.submittedAt, true)}</div>`);
     if (t.teacherStatus === "已完成" && t.doneAt) out.push(`<div class="text-[10px] font-normal text-emerald-600 mt-0.5 whitespace-nowrap"><i class="fa-solid fa-circle-check mr-1"></i>完成 ${fmtTs_(t.doneAt, true)}</div>`);
     return out.join("");
@@ -4138,8 +4146,8 @@ function renderStudentDashboardContent() {
         return true;
     });
 
-    // 排序：最上面是未完成，接著是待訂正，已完成的放在最下面（同一組維持原本順序）
-    const studentStatusRank = t => t.teacherStatus === "已完成" ? 3 : (t.teacherStatus === "待訂正" ? 2 : 1);
+    // 排序：最上面是「老師審核後需重新送審」，接著未完成、待訂正，已完成的放在最下面（同一組維持原本順序）
+    const studentStatusRank = t => needsResubmit_(t) ? 0 : (t.teacherStatus === "已完成" ? 3 : (t.teacherStatus === "待訂正" ? 2 : 1));
     filteredTasks = filteredTasks
         .map((t, i) => ({ t, i }))
         .sort((a, b) => (studentStatusRank(a.t) - studentStatusRank(b.t)) || (a.i - b.i))
@@ -4172,15 +4180,19 @@ function renderStudentDashboardContent() {
                 statusBadge = `<span class="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded text-[10px] font-bold">已勾選・尚未送出</span>`;
             } else if (t.teacherStatus === "待訂正") {
                 statusBadge = `<span class="bg-rose-100 text-rose-800 px-2 py-0.5 rounded text-[10px] font-bold"><i class="fa-solid fa-pen-nib mr-1"></i>待訂正</span>`;
+            } else if (needsResubmit_(t)) {
+                statusBadge = `<span class="bg-amber-100 text-amber-800 px-2 py-0.5 rounded text-[10px] font-bold">老師審核：未完成</span>`;
             }
+            // 老師審核為未完成／待訂正 → 標示審核時間與「需重新送審」
+            if (!t.pendingReview && t.teacherStatus !== "已完成") statusBadge += resubmitNoteHtml_(t, false);
 
             return `
-                <div class="py-3 flex items-start justify-between gap-3">
-                    <div class="flex items-start space-x-3">
+                <div class="py-3 flex items-start justify-between gap-3 ${needsResubmit_(t) ? 'bg-rose-50/60 -mx-3 sm:-mx-4 px-3 sm:px-4' : ''}">
+                    <div class="flex items-start space-x-3 min-w-0">
                         <input type="checkbox" onchange="toggleStudentTaskCheck('${t.id}', this.checked)" ${checkedNow ? 'checked' : ''} ${locked ? 'disabled' : ''} class="mt-1 w-4 h-4 text-indigo-600 rounded ${locked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}">
                         <div>
                             <div class="flex items-center space-x-2">
-                                <span class="font-bold text-xs ${t.type === '作業' ? 'text-blue-600 bg-blue-50' : 'text-purple-600 bg-purple-50'} px-2 py-0.5 rounded">
+                                <span class="font-bold text-xs ${t.type === '作業' ? 'text-blue-600 bg-blue-50' : 'text-purple-600 bg-purple-50'} px-2 py-0.5 rounded shrink-0 whitespace-nowrap">
                                     ${escHtml_(t.subject)}
                                 </span>
                                 <h4 class="font-bold text-slate-800 text-xs sm:text-sm ${checkedNow ? 'line-through text-slate-400' : ''}">${escHtml_(t.title)}</h4>
