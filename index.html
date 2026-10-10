@@ -234,7 +234,7 @@
 
             <!-- 控制頁籤與操作按鈕 -->
             <div class="sticky top-14 sm:top-16 z-20 bg-white rounded-xl border border-slate-200 p-2 sm:p-4 shadow-sm flex flex-col lg:flex-row justify-between items-center gap-2 sm:gap-3">
-                <div class="grid grid-cols-5 sm:flex sm:flex-wrap gap-1 sm:gap-2 bg-slate-100 p-1 rounded-lg w-full lg:w-auto text-xs sm:text-sm">
+                <div class="grid grid-cols-6 sm:flex sm:flex-wrap gap-1 sm:gap-2 bg-slate-100 p-1 rounded-lg w-full lg:w-auto text-xs sm:text-sm">
                     <button id="tabTasksBtn" onclick="switchTeacherTab('tasks')" class="flex-1 md:flex-none px-1 sm:px-3 py-1.5 sm:py-2 font-bold rounded-md whitespace-nowrap bg-white text-indigo-600 shadow-sm">
                         <i class="fa-solid fa-tasks block sm:inline text-base sm:text-sm sm:mr-1"></i><span class="sm:hidden text-[11px] leading-tight">審核</span><span class="hidden sm:inline">進度審核</span>
                     </button>
@@ -246,6 +246,9 @@
                     </button>
                     <button id="tabContactbookBtn" onclick="switchTeacherTab('contactbook')" class="flex-1 md:flex-none px-1 sm:px-3 py-1.5 sm:py-2 font-bold rounded-md whitespace-nowrap text-slate-600 hover:text-slate-900">
                         <i class="fa-solid fa-book-open-reader block sm:inline text-base sm:text-sm sm:mr-1"></i><span class="sm:hidden text-[11px] leading-tight">聯絡簿</span><span class="hidden sm:inline">電子聯絡簿</span>
+                    </button>
+                    <button id="tabSubmitlogBtn" onclick="switchTeacherTab('submitlog')" class="flex-1 md:flex-none px-1 sm:px-3 py-1.5 sm:py-2 font-bold rounded-md whitespace-nowrap text-slate-600 hover:text-slate-900">
+                        <i class="fa-solid fa-clock-rotate-left block sm:inline text-base sm:text-sm sm:mr-1"></i><span class="sm:hidden text-[11px] leading-tight">紀錄</span><span class="hidden sm:inline">送審紀錄</span>
                     </button>
                     <button id="tabSubjectsBtn" onclick="switchTeacherTab('subjects')" class="flex-1 md:flex-none px-1 sm:px-3 py-1.5 sm:py-2 font-bold rounded-md whitespace-nowrap text-slate-600 hover:text-slate-900">
                         <i class="fa-solid fa-shapes block sm:inline text-base sm:text-sm sm:mr-1"></i><span class="sm:hidden text-[11px] leading-tight">設定</span><span class="hidden sm:inline">科目與年級設定</span>
@@ -501,6 +504,52 @@
                     <div id="tcbExpiredWrap" class="hidden p-3 space-y-2 border-t border-slate-200">
                         <div id="tcbExpiredList" class="space-y-2"></div>
                     </div>
+                </div>
+            </div>
+
+            <!-- 頁籤：送審紀錄（學生送出／撤回、老師審核的日期時間） -->
+            <div id="teacherSubmitlogTab" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-6 space-y-4">
+                <div>
+                    <h3 class="font-bold text-slate-800 text-sm sm:text-base flex items-center">
+                        <i class="fa-solid fa-clock-rotate-left text-indigo-600 mr-2"></i> 送審紀錄
+                    </h3>
+                    <p class="text-[11px] sm:text-xs text-slate-500">記錄學生每次「送出審核」「撤回」，以及老師審核結果的日期時間（台灣時間）。保留 120 天；項目被刪除後紀錄仍可查。</p>
+                </div>
+                <div class="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 text-xs">
+                    <div class="relative col-span-2 sm:col-span-1 min-w-[150px]">
+                        <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        <input type="text" id="logSearchKeyword" oninput="renderSubmitLog()" placeholder="搜尋姓名/項目..." class="w-full pl-8 pr-2 py-1.5 border border-slate-300 rounded-lg text-slate-700 focus:outline-none bg-white">
+                    </div>
+                    <select id="logStudentFilter" onchange="renderSubmitLog()" class="bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-slate-700 font-bold">
+                        <option value="all">所有學生</option>
+                    </select>
+                    <select id="logActionFilter" onchange="renderSubmitLog()" class="bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-slate-700 font-bold">
+                        <option value="all">所有動作</option>
+                        <option value="submit">送出審核</option>
+                        <option value="withdraw">撤回</option>
+                        <option value="review:已完成">審核：已完成</option>
+                        <option value="review:待訂正">審核：待訂正</option>
+                        <option value="review:未完成">審核：未完成</option>
+                    </select>
+                    <select id="logTimeFilter" onchange="onTimeFilterChange_('log')" class="bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-slate-700 font-bold">
+                        <option value="all">時間：全部</option>
+                        <option value="today">今天</option>
+                        <option value="week">本週（週一～週日）</option>
+                        <option value="lastweek">上週</option>
+                        <option value="7d">近 7 天</option>
+                        <option value="month">本月</option>
+                        <option value="custom">自訂區間…</option>
+                    </select>
+                    <div id="logTimeCustomBox" class="hidden col-span-2 items-center gap-1">
+                        <input type="date" id="logTimeFrom" onchange="onTimeFilterChange_('log')" class="bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-slate-700 font-bold" title="從">
+                        <span class="text-slate-400">～</span>
+                        <input type="date" id="logTimeTo" onchange="onTimeFilterChange_('log')" class="bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-slate-700 font-bold" title="到">
+                    </div>
+                </div>
+                <div id="submitLogSummary" class="text-[11px] text-slate-500 font-bold"></div>
+                <div id="submitLogList" class="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden"></div>
+                <div class="text-center">
+                    <button type="button" id="submitLogMoreBtn" onclick="submitLogLimit_ += 100; renderSubmitLog();" class="hidden text-xs font-bold text-indigo-600 hover:underline">顯示更多</button>
                 </div>
             </div>
 
@@ -1193,6 +1242,7 @@
             students: Array.isArray(src.students) ? src.students : base.students,
             tasks: Array.isArray(src.tasks) ? src.tasks : base.tasks,
             contactBook: Array.isArray(src.contactBook) ? src.contactBook : [],
+            submitLog: Array.isArray(src.submitLog) ? src.submitLog : [],
             gradeAvatars: (src.gradeAvatars && typeof src.gradeAvatars === 'object' && !Array.isArray(src.gradeAvatars)) ? src.gradeAvatars : {}
         };
     }
@@ -1325,6 +1375,7 @@
         const payload = normalizeAppData(window.appData);
         payload.teacherPwd = _pendingTeacherPwdPlain || "";
         delete payload.champions; // 跑馬燈名單是後端即時算的，不需要存回去
+        delete payload.submitLog; // 送審紀錄只由後端寫入，不需要傳回去
         // pwdPlain 只是給老師端畫面顯示用的，絕不送回後端（舊版後端會原樣存起來）
         payload.students = payload.students.map(st => { const c = { ...st }; delete c.pwdPlain; return c; });
 
@@ -1524,6 +1575,11 @@
             // 學生端只會改 tasks，因此即時同步時只替換 tasks，避免干擾老師正在編輯的學生資料。
             window.appData.tasks = remoteTasks;
             if (result.data && result.data.champions) window.appData.champions = result.data.champions;
+            if (result.data && Array.isArray(result.data.submitLog)) {
+                window.appData.submitLog = result.data.submitLog;
+                const logTab = document.getElementById("teacherSubmitlogTab");
+                if (logTab && !logTab.classList.contains("hidden") && typeof renderSubmitLog === "function") renderSubmitLog();
+            }
             renderMarquee_();
             updateTeacherPendingBadge(pendingTasks);
             if (typeof renderKpiOverview === "function") renderKpiOverview();
@@ -1867,7 +1923,7 @@ function checkAndCleanLifeCycleTasks() {
 /* ==================== 老師端核心邏輯 ==================== */
 
 function switchTeacherTab(tabName) {
-    const tabs = ['tasks', 'dispatch', 'students', 'contactbook', 'subjects'];
+    const tabs = ['tasks', 'dispatch', 'students', 'contactbook', 'submitlog', 'subjects'];
     tabs.forEach(t => {
         const btn = document.getElementById(`tab${t.charAt(0).toUpperCase() + t.slice(1)}Btn`);
         const view = document.getElementById(`teacher${t.charAt(0).toUpperCase() + t.slice(1)}Tab`);
@@ -1886,6 +1942,7 @@ function switchTeacherTab(tabName) {
     if (tabName === 'dispatch') renderDispatchManagement();
     if (tabName === 'students') renderStudentsCards();
     if (tabName === 'contactbook') renderContactBook();
+    if (tabName === 'submitlog') { submitLogLimit_ = 100; renderSubmitLog(); }
     if (tabName === 'subjects') renderSubjectsAndGradesTags();
 }
 
@@ -2094,7 +2151,8 @@ function isKpiFull_(k) {
 const TIME_FILTER_RENDERERS_ = {
     task: () => renderTeacherTasksTable(),
     dispatch: () => renderDispatchManagement(),
-    st: () => renderStudentDashboardContent()
+    st: () => renderStudentDashboardContent(),
+    log: () => renderSubmitLog()
 };
 
 function onTimeFilterChange_(prefix) {
@@ -2147,6 +2205,15 @@ const WEEKDAY_NAMES_ = ["星期日", "星期一", "星期二", "星期三", "星
 const CONTACT_BOOK_EXPIRED_DAYS = 10; // 過期區顯示天數；超過這天數後端會自動刪除（需與 Code.gs CONTACT_BOOK_KEEP_DAYS 一致）
 const contactBookExpiredOpen_ = { tcb: false, scb: false }; // 老師端／學生端「過期聯絡簿」是否展開
 
+// ISO 時間 → 台灣時間「2026/10/10 14:32」；short=true 時省略年份「10/10 14:32」
+function fmtTs_(iso, short) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    const p = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+        .formatToParts(d).map(x => [x.type, x.value]));
+    return `${short ? "" : p.year + "/"}${p.month}/${p.day} ${p.hour}:${p.minute}`;
+}
 // 台灣時間的「現在」：回傳一個 Date，它的年月日時分（getFullYear/getDate/getDay…）就是台灣當下的時間，
 // 不論這台電腦設定在哪個時區，日期、星期、本週/上週都和後端（Asia/Taipei）一致
 function twNow_() {
@@ -2461,6 +2528,86 @@ async function deleteContactBookEntry(id) {
     });
 }
 
+/* ==================== 送審紀錄 ==================== */
+let submitLogLimit_ = 100;
+const SUBMIT_LOG_ACTION_ = {
+    submit: { label: "送出審核", cls: "bg-sky-100 text-sky-700", icon: "fa-paper-plane" },
+    withdraw: { label: "撤回", cls: "bg-slate-100 text-slate-600", icon: "fa-rotate-left" },
+    "review:已完成": { label: "審核：已完成", cls: "bg-emerald-100 text-emerald-700", icon: "fa-circle-check" },
+    "review:待訂正": { label: "審核：待訂正", cls: "bg-rose-100 text-rose-700", icon: "fa-pen-nib" },
+    "review:未完成": { label: "審核：未完成", cls: "bg-amber-100 text-amber-700", icon: "fa-circle" }
+};
+function submitLogKey_(e) { return e.action === "review" ? "review:" + e.status : e.action; }
+
+// 後端紀錄＋舊資料補齊（啟用紀錄前就送審／完成的項目，用項目上的時間補上）
+function getSubmitLogEntries_() {
+    const log = Array.isArray(window.appData.submitLog) ? window.appData.submitLog.slice() : [];
+    const seen = new Set(log.map(e => `${e.taskId}|${submitLogKey_(e)}|${e.at}`));
+    (window.appData.tasks || []).forEach(t => {
+        const base = { taskId: String(t.id), studentId: t.studentId, type: t.type, subject: t.subject, title: t.title, date: t.date, backfill: true };
+        if (t.submittedAt && !seen.has(`${t.id}|submit|${t.submittedAt}`)) log.push({ ...base, at: t.submittedAt, action: "submit" });
+        if (t.teacherStatus === "已完成" && t.doneAt && !seen.has(`${t.id}|review:已完成|${t.doneAt}`)) log.push({ ...base, at: t.doneAt, action: "review", status: "已完成" });
+    });
+    return log.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+}
+
+function renderSubmitLog() {
+    const listEl = document.getElementById("submitLogList");
+    if (!listEl) return;
+    const stSel = document.getElementById("logStudentFilter");
+    const students = window.appData.students || [];
+    const keepSt = stSel.value;
+    stSel.innerHTML = '<option value="all">所有學生</option>' + sortStudentsByGradeSchool_(students)
+        .map(s => `<option value="${escHtml_(s.id)}">${escHtml_(studentOptionLabel_(s))}</option>`).join("");
+    stSel.value = [...stSel.options].some(o => o.value === keepSt) ? keepSt : "all";
+
+    const kw = (document.getElementById("logSearchKeyword").value || "").trim().toLowerCase();
+    const act = document.getElementById("logActionFilter").value;
+    const tf = readTimeFilter_("log");
+    const byId = Object.fromEntries(students.map(s => [s.id, s]));
+
+    const rows = getSubmitLogEntries_().filter(e => {
+        if (stSel.value !== "all" && e.studentId !== stSel.value) return false;
+        if (act !== "all" && submitLogKey_(e) !== act) return false;
+        const day = fmtTs_(e.at).slice(0, 10).replace(/\//g, "-");
+        if (!matchesTimeFilter_(day, tf)) return false;
+        if (kw) {
+            const st = byId[e.studentId];
+            const hay = [st ? st.name : e.studentName, st ? st.school : "", e.title, e.subject].join(" ").toLowerCase();
+            if (!hay.includes(kw)) return false;
+        }
+        return true;
+    });
+
+    const nSubmit = rows.filter(e => e.action === "submit").length;
+    const nDone = rows.filter(e => submitLogKey_(e) === "review:已完成").length;
+    document.getElementById("submitLogSummary").innerText = `共 ${rows.length} 筆（送出審核 ${nSubmit} 筆、審核完成 ${nDone} 筆）`;
+
+    const shown = rows.slice(0, submitLogLimit_);
+    listEl.innerHTML = shown.length ? shown.map(e => {
+        const st = byId[e.studentId];
+        const a = SUBMIT_LOG_ACTION_[submitLogKey_(e)] || { label: e.action, cls: "bg-slate-100 text-slate-600", icon: "fa-circle-info" };
+        const name = st ? st.name : (e.studentName || "（已刪除的學生）");
+        return `
+            <div class="px-3 py-2.5 flex items-start gap-3 bg-white">
+                <div class="shrink-0 w-[4.5rem] sm:w-28 text-[11px] font-mono text-slate-500 leading-tight pt-0.5">${(() => { const [d, h] = fmtTs_(e.at).split(" "); return `${escHtml_(d)}<br class="sm:hidden"> ${escHtml_(h || "")}`; })()}</div>
+                <div class="min-w-0 flex-1">
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <span class="text-xs font-bold text-slate-800">${escHtml_(name)}</span>
+                        ${st && st.school ? `<span class="text-[10px] text-slate-400">${escHtml_(st.school)} ${escHtml_(st.grade || "")}</span>` : ""}
+                        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded ${a.cls} whitespace-nowrap"><i class="fa-solid ${a.icon} mr-1"></i>${a.label}</span>
+                    </div>
+                    <div class="text-[11px] text-slate-600 mt-0.5 break-words">
+                        <span class="${e.type === '考卷' ? 'text-purple-600' : 'text-blue-600'} font-bold">${escHtml_(e.type || "")}${e.subject ? "・" + escHtml_(e.subject) : ""}</span>
+                        ${escHtml_(e.title || "")}
+                        ${e.date ? `<span class="text-slate-400">（發布 ${escHtml_(e.date)}）</span>` : ""}
+                    </div>
+                </div>
+            </div>`;
+    }).join("") : '<div class="text-center text-slate-400 text-xs font-bold py-8 bg-white">沒有符合條件的紀錄</div>';
+    document.getElementById("submitLogMoreBtn").classList.toggle("hidden", rows.length <= submitLogLimit_);
+}
+
 /* 老師端：上週／本週 KPI 名單與需要關懷名單 */
 function renderKpiOverview() {
     const lastEl = document.getElementById("kpiLastWeekList");
@@ -2676,6 +2823,7 @@ function renderTeacherTasksTable() {
                     ${escHtml_(t.title)}
                     ${t.pendingReview ? `<span class="md:ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-500 text-white animate-pulse whitespace-nowrap"><i class="fa-solid fa-bell mr-1"></i>待審核</span>` : ''}
                     <div class="md:hidden text-[10px] font-normal text-slate-400 mt-0.5">${escHtml_(t.date)} · ${t.studentChecked ? '<span class="text-emerald-600">已勾選</span>' : '未勾選'}</div>
+                    <div class="md:hidden">${taskTimeNoteHtml_(t)}</div>
                 </td>
                 <td class="hidden md:table-cell px-3 sm:px-4 py-3 text-slate-500 text-xs font-mono">${t.date}</td>
                 <td class="hidden md:table-cell px-3 sm:px-4 py-3">
@@ -2687,6 +2835,7 @@ function renderTeacherTasksTable() {
                     <span class="inline-block px-2.5 py-1 rounded-lg text-xs font-bold border ${statusBadgeClass}">
                         ${t.teacherStatus}
                     </span>
+                    ${taskTimeNoteHtml_(t)}
                 </td>
                 <td class="px-2 sm:px-4 py-3 text-right">
                     <div class="inline-flex flex-col md:flex-row rounded-lg shadow-sm border border-slate-200 bg-white p-0.5" role="group">
@@ -2700,6 +2849,14 @@ function renderTeacherTasksTable() {
     }).join('');
 
     updateReviewBatchBar();
+}
+
+/* 項目的時間戳記：送出審核時間、審核完成時間（台灣時間） */
+function taskTimeNoteHtml_(t) {
+    const out = [];
+    if (t.submittedAt && (t.pendingReview || t.teacherStatus === "已完成")) out.push(`<div class="text-[10px] font-normal text-sky-600 mt-1 whitespace-nowrap"><i class="fa-solid fa-paper-plane mr-1"></i>送審 ${fmtTs_(t.submittedAt, true)}</div>`);
+    if (t.teacherStatus === "已完成" && t.doneAt) out.push(`<div class="text-[10px] font-normal text-emerald-600 mt-0.5 whitespace-nowrap"><i class="fa-solid fa-circle-check mr-1"></i>完成 ${fmtTs_(t.doneAt, true)}</div>`);
+    return out.join("");
 }
 
 /* ===== 批次審核：勾選管理 ===== */
@@ -2793,6 +2950,7 @@ async function teacherReviewPatch_(ids, status) {
                 }
                 if (!result || result.status !== "success") throw new Error((result && result.message) || "審核更新失敗");
                 if (Array.isArray(result.tasks)) window.appData.tasks = result.tasks;
+                if (Array.isArray(result.submitLog)) window.appData.submitLog = result.submitLog;
                 reviewed = true;
                 return true;
             } catch (e) {
@@ -4004,9 +4162,11 @@ function renderStudentDashboardContent() {
 
             let statusBadge = `<span class="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[10px] font-bold">未完成</span>`;
             if (t.teacherStatus === "已完成") {
-                statusBadge = `<span class="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold"><i class="fa-solid fa-check mr-1"></i>審核通過 (完成)</span>`;
+                statusBadge = `<span class="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold"><i class="fa-solid fa-check mr-1"></i>審核通過 (完成)</span>` +
+                    (t.doneAt ? `<div class="mt-1 text-[10px] text-emerald-600 whitespace-nowrap"><i class="fa-regular fa-clock mr-1"></i>${fmtTs_(t.doneAt)} 完成</div>` : "");
             } else if (t.pendingReview) {
                 statusBadge = `<span class="bg-amber-100 text-amber-800 px-2 py-0.5 rounded text-[10px] font-bold">待老師審核</span>` +
+                    (t.submittedAt ? `<div class="mt-1 text-[10px] text-slate-400 whitespace-nowrap">${fmtTs_(t.submittedAt, true)} 送出</div>` : "") +
                     `<div><button type="button" onclick="withdrawStudentSubmission('${t.id}')" class="mt-1 text-[10px] text-slate-400 underline hover:text-slate-600">撤回</button></div>`;
             } else if (hasDraft && studentDraftChecks.get(idKey) === true) {
                 statusBadge = `<span class="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded text-[10px] font-bold">已勾選・尚未送出</span>`;

@@ -30,7 +30,9 @@
  */
 
 // 後端版本：用瀏覽器開 /exec 網址可看到，確認部署的是新版
-const BACKEND_VERSION = "2026-10-10-v5-safe-merge";
+const BACKEND_VERSION = "2026-10-10-v6-submit-log";
+const SUBMIT_LOG_KEEP_DAYS = 120;   // 送審／審核紀錄保留天數（和作業 120 天生命週期一致）
+const SUBMIT_LOG_MAX = 3000;        // 最多保留筆數，避免試算表過大
 const CONTACT_BOOK_KEEP_DAYS = 10; // 聯絡簿日期超過這麼多天就自動刪除
 const APP_TZ = "Asia/Taipei"; // 週的計算（週一～週日）固定用台灣時間
 const DATA_SHEET_NAME = "__APP_DATA__";
@@ -112,6 +114,9 @@ function validateAppData_(data) {
   }
 
   // 電子聯絡簿：可以沒有（舊資料），有的話一定要是陣列
+  if (data.submitLog !== undefined && !Array.isArray(data.submitLog)) {
+    throw new Error("submitLog 必須是陣列");
+  }
   if (data.contactBook !== undefined && !Array.isArray(data.contactBook)) {
     throw new Error("contactBook 必須是陣列");
   }
@@ -424,6 +429,7 @@ function teacherView_(data) {
     return v;
   });
   o.contactBook = contactBookKeep_(o.contactBook, new Date());
+  o.submitLog = trimSubmitLog_(data.submitLog, new Date());
   o.champions = computeChampions_(data, new Date());
   return o;
 }
@@ -690,8 +696,10 @@ function mergeIncoming_(stored, incoming) {
 
   const out = {};
   Object.keys(incoming).forEach(function (k) {
-    if (k !== "teacherPwd" && k !== "students" && k !== "champions") out[k] = incoming[k]; // champions 是即時算出來的，不存
+    if (k !== "teacherPwd" && k !== "students" && k !== "champions" && k !== "submitLog") out[k] = incoming[k]; // champions 是即時算出來的，不存
   });
+  // 送審紀錄只由後端寫入，老師整份儲存不能改動或蓋掉
+  if (Array.isArray(stored.submitLog)) out.submitLog = stored.submitLog;
 
   // 作業的「進度欄位」（學生送審、老師審核）一律以資料庫為準：
   // 老師的畫面可能是舊的，整份儲存時不能把學生剛送出的狀態蓋回去。
@@ -876,6 +884,24 @@ function setTaskFields_(task, fields) {
   return changed;
 }
 
+/* 送審／審核紀錄：每次學生送出、撤回，老師審核改狀態，都記一筆（含當下的項目資訊，項目之後被刪也查得到） */
+function pushSubmitLog_(data, task, action, extra) {
+  if (!Array.isArray(data.submitLog)) data.submitLog = [];
+  const st = (data.students || []).filter(function (s) { return s.id === task.studentId; })[0];
+  const e = {
+    at: new Date().toISOString(), action: action, taskId: String(task.id), studentId: task.studentId,
+    studentName: st ? st.name : "", type: task.type || "", subject: task.subject || "", title: task.title || "", date: task.date || ""
+  };
+  if (extra) Object.keys(extra).forEach(function (k) { e[k] = extra[k]; });
+  data.submitLog.push(e);
+}
+function trimSubmitLog_(list, now) {
+  const cutoff = new Date(now.getTime() - SUBMIT_LOG_KEEP_DAYS * 86400000).toISOString();
+  let out = (Array.isArray(list) ? list : []).filter(function (e) { return e && typeof e.at === "string" && e.at >= cutoff; });
+  if (out.length > SUBMIT_LOG_MAX) out = out.slice(out.length - SUBMIT_LOG_MAX);
+  return out;
+}
+
 function applyPatchOps_(data, ops) {
   const byId = {};
   data.tasks.forEach(function (t) { byId[String(t.id)] = t; });
@@ -909,7 +935,7 @@ function applyPatchOps_(data, ops) {
           pendingReview: false,
           studentChecked: op.status === "已完成"
         });
-        if (didChange) changed++;
+        if (didChange) { changed++; pushSubmitLog_(data, task, "review", { status: op.status }); }
         // 記下審核通過的時間（跑馬燈排序用）；改成其他狀態就清掉
         if (op.status === "已完成" && !wasDone) task.doneAt = new Date().toISOString();
         else if (op.status !== "已完成") delete task.doneAt;
@@ -923,13 +949,14 @@ function applyPatchOps_(data, ops) {
 
       const submit = (op.op === "studentSubmit");
       const didChange = setTaskFields_(task, { studentChecked: submit, pendingReview: submit });
-      if (didChange) changed++;
+      if (didChange) { changed++; pushSubmitLog_(data, task, submit ? "submit" : "withdraw"); }
       // 記下學生送出的時間（跑馬燈「完成快慢」排序用）；撤回就清掉
       if (submit && didChange) task.submittedAt = new Date().toISOString();
       else if (!submit) delete task.submittedAt;
     });
   });
 
+  if (changed > 0 && Array.isArray(data.submitLog)) data.submitLog = trimSubmitLog_(data.submitLog, new Date());
   return { changed: changed, skipped: skipped };
 }
 
@@ -963,6 +990,7 @@ function handlePatch_(e) {
       skipped: result.skipped,
       tasks: tasks,
       contactBook: session.role === "teacher" ? contactBookKeep_(data.contactBook, new Date()) : undefined,
+      submitLog: session.role === "teacher" ? trimSubmitLog_(data.submitLog, new Date()) : undefined,
       savedAt: new Date().toISOString()
     });
   });
