@@ -327,16 +327,16 @@
                 </div>
 
                 <div class="overflow-x-auto custom-scrollbar">
-                    <table class="w-full text-left text-xs sm:text-sm md:whitespace-nowrap lg:whitespace-normal">
+                    <table class="w-full text-left text-xs sm:text-sm md:whitespace-nowrap">
                         <thead class="bg-slate-100 text-slate-600 text-[11px] sm:text-xs font-semibold uppercase">
                             <tr>
                                 <th class="px-2 sm:px-4 py-3 w-8"><input type="checkbox" id="reviewSelectAll" onchange="toggleSelectAllReview(this.checked)" class="rounded text-indigo-600" title="全選目前列表"></th>
                                 <th class="px-3 sm:px-4 py-3">學生資訊</th>
-                                <th class="hidden md:table-cell px-3 sm:px-4 py-3">學校/年級班級</th>
-                                <th class="hidden md:table-cell px-3 sm:px-4 py-3">類型/科目</th>
-                                <th class="px-3 sm:px-4 py-3">項目名稱/範圍</th>
-                                <th class="hidden md:table-cell px-3 sm:px-4 py-3">發布日期</th>
-                                <th class="hidden md:table-cell px-3 sm:px-4 py-3">學生/家長勾選</th>
+                                <th class="hidden xl:table-cell px-3 sm:px-4 py-3">學校/年級班級</th>
+                                <th class="hidden xl:table-cell px-3 sm:px-4 py-3">類型/科目</th>
+                                <th class="px-3 sm:px-4 py-3 md:min-w-[12rem]">項目名稱/範圍</th>
+                                <th class="hidden xl:table-cell px-3 sm:px-4 py-3">發布日期</th>
+                                <th class="hidden lg:table-cell px-3 sm:px-4 py-3">學生/家長勾選</th>
                                 <th class="hidden md:table-cell px-3 sm:px-4 py-3">老師確認狀態</th>
                                 <th class="px-3 sm:px-4 py-3 text-right"><span class="hidden md:inline">修改狀態 / 操作</span><span class="md:hidden">審核</span></th>
                             </tr>
@@ -2813,23 +2813,23 @@ function renderTeacherTasksTable() {
                     <span class="relative inline-block">${student.avatar || '👨‍🎓'}${isStudentAllCompleted(t.studentId) ? '<span class="absolute -top-2.5 -left-1.5 text-xs" title="100% 全數完成優良獎章！">👑</span>' : ''}${careIconHtml_(t.studentId, 'absolute -top-2.5 -left-1.5 text-xs')}</span>
                     <span>${escHtml_(student.name)}</span>
                     </div>
-                    <div class="md:hidden text-[10px] font-normal text-slate-400 mt-0.5">${fullClass}</div>
+                    <div class="xl:hidden text-[10px] font-normal text-slate-400 mt-0.5">${fullClass}</div>
                 </td>
-                <td class="hidden md:table-cell px-3 sm:px-4 py-3 text-slate-500 text-xs">${fullClass}</td>
-                <td class="hidden md:table-cell px-3 sm:px-4 py-3 font-semibold">
+                <td class="hidden xl:table-cell px-3 sm:px-4 py-3 text-slate-500 text-xs">${fullClass}</td>
+                <td class="hidden xl:table-cell px-3 sm:px-4 py-3 font-semibold">
                     <span class="${t.type === '作業' ? 'text-blue-600 bg-blue-50' : 'text-purple-600 bg-purple-50'} px-2 py-0.5 rounded text-xs">
                         ${escHtml_(t.type)} - ${escHtml_(t.subject)}
                     </span>
                 </td>
-                <td class="px-2 sm:px-4 py-3 font-bold text-slate-700">
-                    <div class="md:hidden mb-0.5"><span class="${t.type === '作業' ? 'text-blue-600 bg-blue-50' : 'text-purple-600 bg-purple-50'} px-1.5 py-0.5 rounded text-[10px]">${escHtml_(t.type)} - ${escHtml_(t.subject)}</span></div>
+                <td class="px-2 sm:px-4 py-3 font-bold text-slate-700 md:whitespace-normal md:min-w-[12rem]">
+                    <div class="xl:hidden mb-0.5"><span class="${t.type === '作業' ? 'text-blue-600 bg-blue-50' : 'text-purple-600 bg-purple-50'} px-1.5 py-0.5 rounded text-[10px]">${escHtml_(t.type)} - ${escHtml_(t.subject)}</span></div>
                     ${escHtml_(t.title)}
-                    ${t.pendingReview ? `<span class="md:ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-500 text-white animate-pulse whitespace-nowrap"><i class="fa-solid fa-bell mr-1"></i>待審核</span>` : ''}
-                    <div class="md:hidden text-[10px] font-normal text-slate-400 mt-0.5">${escHtml_(t.date)} · ${t.studentChecked ? '<span class="text-emerald-600">已勾選</span>' : '未勾選'}</div>
+                    ${t.pendingReview ? `<span class="md:ml-1 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-500 text-white animate-pulse whitespace-nowrap"><i class="fa-solid fa-bell mr-1"></i>待審核</span>` : ''}
+                    <div class="xl:hidden text-[10px] font-normal text-slate-400 mt-0.5">發布 ${escHtml_(t.date)}<span class="lg:hidden"> · ${t.studentChecked ? '<span class="text-emerald-600">已勾選</span>' : '未勾選'}</span></div>
                     <div class="md:hidden">${taskTimeNoteHtml_(t)}</div>
                 </td>
-                <td class="hidden md:table-cell px-3 sm:px-4 py-3 text-slate-500 text-xs font-mono">${t.date}</td>
-                <td class="hidden md:table-cell px-3 sm:px-4 py-3">
+                <td class="hidden xl:table-cell px-3 sm:px-4 py-3 text-slate-500 text-xs font-mono">${t.date}</td>
+                <td class="hidden lg:table-cell px-3 sm:px-4 py-3">
                     ${t.studentChecked ? 
                         `<span class="inline-flex items-center text-emerald-600 font-bold text-xs"><i class="fa-solid fa-circle-check mr-1"></i> 已勾選</span>` : 
                         `<span class="inline-flex items-center text-slate-400 text-xs"><i class="fa-regular fa-circle mr-1"></i> 未勾選</span>`}
