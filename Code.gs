@@ -30,7 +30,7 @@
  */
 
 // 後端版本：用瀏覽器開 /exec 網址可看到，確認部署的是新版
-const BACKEND_VERSION = "2026-10-09-v4-contactbook";
+const BACKEND_VERSION = "2026-10-10-v5-safe-merge";
 const CONTACT_BOOK_KEEP_DAYS = 10; // 聯絡簿日期超過這麼多天就自動刪除
 const APP_TZ = "Asia/Taipei"; // 週的計算（週一～週日）固定用台灣時間
 const DATA_SHEET_NAME = "__APP_DATA__";
@@ -428,6 +428,31 @@ function teacherView_(data) {
   return o;
 }
 
+// 學生只拿得到適用於自己（年級＋學校）的聯絡簿項目；整則都不適用的就不給
+function cbItemApplies_(it, st) {
+  if (Array.isArray(it.targets)) {
+    if (!it.targets.length) return true;
+    return it.targets.some(function (t) { return t && t.grade === st.grade && Array.isArray(t.schools) && t.schools.indexOf(st.school) >= 0; });
+  }
+  // 舊格式：grades[] / schools[]
+  const gs = Array.isArray(it.grades) ? it.grades : [], ss = Array.isArray(it.schools) ? it.schools : [];
+  return (!gs.length || gs.indexOf(st.grade) >= 0) && (!ss.length || ss.indexOf(st.school) >= 0);
+}
+function contactBookForStudent_(list, st, now) {
+  const out = [];
+  contactBookKeep_(list, now).forEach(function (e) {
+    if (!Array.isArray(e.items) || !e.items.length) { out.push(e); return; } // 舊的純文字聯絡簿＝全體
+    const items = e.items.filter(function (it) { return cbItemApplies_(it, st); });
+    if (!items.length) return;
+    const copy = {};
+    Object.keys(e).forEach(function (k) { copy[k] = e[k]; });
+    copy.items = items;
+    copy.content = items.map(function (it, i) { return (i + 1) + ". " + it.text; }).join("\n");
+    out.push(copy);
+  });
+  return out;
+}
+
 function studentView_(data, studentId) {
   const me = data.students.filter(function (s) { return s.id === studentId; })[0];
   if (!me) return null;
@@ -436,7 +461,7 @@ function studentView_(data, studentId) {
     grades: data.grades,
     students: [stripStudent_(me)],
     tasks: data.tasks.filter(function (t) { return t.studentId === studentId; }),
-    contactBook: contactBookKeep_(data.contactBook, new Date()),
+    contactBook: contactBookForStudent_(data.contactBook, me, new Date()),
     champions: computeChampions_(data, new Date())
   };
 }
@@ -585,6 +610,7 @@ function handleLogin_(e) {
       token: createSession_(role, studentId),
       role: role,
       studentId: studentId || null,
+      defaultTeacherPwd: role === "teacher" && plain === DEFAULT_TEACHER_PWD,
       data: viewForSession_(data, session)
     });
   } catch (err) {
@@ -665,6 +691,22 @@ function mergeIncoming_(stored, incoming) {
   const out = {};
   Object.keys(incoming).forEach(function (k) {
     if (k !== "teacherPwd" && k !== "students" && k !== "champions") out[k] = incoming[k]; // champions 是即時算出來的，不存
+  });
+
+  // 作業的「進度欄位」（學生送審、老師審核）一律以資料庫為準：
+  // 老師的畫面可能是舊的，整份儲存時不能把學生剛送出的狀態蓋回去。
+  // 老師能改的只有 類型/科目/標題/日期、新增與刪除項目。
+  const storedTaskById = {};
+  (stored.tasks || []).forEach(function (t) { storedTaskById[String(t.id)] = t; });
+  out.tasks = (incoming.tasks || []).map(function (t) {
+    const old = storedTaskById[String(t.id)];
+    if (!old) return t;
+    const merged = {};
+    Object.keys(t).forEach(function (k) { merged[k] = t[k]; });
+    TASK_PROGRESS_FIELDS.forEach(function (k) {
+      if (old[k] !== undefined) merged[k] = old[k]; else delete merged[k];
+    });
+    return merged;
   });
 
   out.students = incoming.students.map(function (s) {
@@ -776,6 +818,7 @@ function handleChangePwd_(e) {
  * 回傳 { status, changed, skipped, tasks }；學生憑證的 tasks 只含自己的項目。
  * ================================================================== */
 const REVIEW_STATUSES = ["未完成", "待訂正", "已完成"];
+const TASK_PROGRESS_FIELDS = ["studentChecked", "pendingReview", "teacherStatus", "submittedAt", "doneAt"];
 const MAX_PATCH_OPS = 50;
 const MAX_PATCH_IDS = 500;
 
@@ -785,6 +828,21 @@ function validatePatchOps_(rawOps, session) {
 
   return rawOps.map(function (op) {
     if (!op || typeof op !== "object") throw new Error("ops 內含無效的操作");
+
+    if (op.op === "cbSet" || op.op === "cbDelete") {
+      if (session.role !== "teacher") throw new Error("NOT_ALLOWED");
+      if (op.op === "cbDelete") {
+        if (!op.id || typeof op.id !== "string") throw new Error("cbDelete 缺少 id");
+        return { op: op.op, id: op.id };
+      }
+      const en = op.entry;
+      if (!en || typeof en !== "object" || typeof en.id !== "string" || !en.id ||
+          !/^\d{4}-\d{2}-\d{2}$/.test(String(en.date || "")) || typeof en.content !== "string") {
+        throw new Error("cbSet 的聯絡簿格式不正確");
+      }
+      return { op: op.op, entry: en };
+    }
+
     if (!Array.isArray(op.ids) || op.ids.length === 0 || op.ids.length > MAX_PATCH_IDS) {
       throw new Error("ids 必須是 1~" + MAX_PATCH_IDS + " 個項目編號");
     }
@@ -826,6 +884,18 @@ function applyPatchOps_(data, ops) {
   const skipped = [];
 
   ops.forEach(function (op) {
+    if (op.op === "cbSet" || op.op === "cbDelete") {
+      if (!Array.isArray(data.contactBook)) data.contactBook = [];
+      const idx = data.contactBook.findIndex(function (x) { return x && x.id === (op.op === "cbSet" ? op.entry.id : op.id); });
+      if (op.op === "cbSet") {
+        if (idx >= 0) data.contactBook[idx] = op.entry; else data.contactBook.push(op.entry);
+        changed++;
+      } else if (idx >= 0) {
+        data.contactBook.splice(idx, 1);
+        changed++;
+      }
+      return;
+    }
     op.ids.forEach(function (rawId) {
       const id = String(rawId);
       const task = byId[id];
@@ -892,6 +962,7 @@ function handlePatch_(e) {
       changed: result.changed,
       skipped: result.skipped,
       tasks: tasks,
+      contactBook: session.role === "teacher" ? contactBookKeep_(data.contactBook, new Date()) : undefined,
       savedAt: new Date().toISOString()
     });
   });

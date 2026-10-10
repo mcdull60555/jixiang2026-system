@@ -1373,7 +1373,7 @@
                     console.error("儲存至 Google 試算表失敗:", r.error);
                     updateConnectionStatus('error');
                     if (r.error && r.error.unauthorized && typeof clearAuthAndLogout === "function") {
-                        clearAuthAndLogout("登入已過期或沒有權限，請重新登入。");
+                        clearAuthAndLogout("登入已過期（超過 6 小時沒有操作），剛才的修改尚未儲存。\n請重新登入後再操作一次。");
                     } else {
                         alert("資料尚未成功儲存到 Google 試算表。\n\n已自動重試多次仍失敗，請稍後再操作一次。\n\n錯誤：" + ((r.error && r.error.message) || r.error));
                     }
@@ -1670,6 +1670,12 @@ async function verifyTeacherLogin() {
             saveAuthState();
             closeModal("teacherLoginModal");
             renderRoleView();
+            if (result.defaultTeacherPwd) {
+                // 等登入中遮罩收起後再提醒
+                setTimeout(() => {
+                    if (confirm("⚠️ 你目前還在使用預設的老師密碼（1234），任何人都可能猜到。\n\n建議立即修改，要現在修改嗎？")) openTeacherPwdModal();
+                }, 300);
+            }
         } else if (result && result.status === "locked") {
             document.getElementById("teacherPwdError").innerText = result.message || "嘗試次數過多，請稍後再試";
             document.getElementById("teacherPwdError").classList.remove("hidden");
@@ -1826,7 +1832,7 @@ function renderRoleView() {
 /* ==================== 120天生命週期自動清空機制 ==================== */
 function checkAndCleanLifeCycleTasks() {
     if (!window.appData || !window.appData.tasks) return;
-    const now = new Date();
+    const now = twNow_();
     const activeTasks = [];
     
     window.appData.tasks.forEach(t => {
@@ -1909,7 +1915,7 @@ function populateTeacherFilterDropdowns() {
     if (stSelect) {
         const curSt = stSelect.value;
         stSelect.innerHTML = `<option value="all">所有學生</option>` +
-            window.appData.students.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+            window.appData.students.map(s => `<option value="${escHtml_(s.id)}">${escHtml_(s.name)}</option>`).join('');
         stSelect.value = curSt || "all";
     }
 
@@ -1925,7 +1931,7 @@ function populateTeacherFilterDropdowns() {
     if (dispatchSubFilter) {
         const curSub = dispatchSubFilter.value;
         dispatchSubFilter.innerHTML = `<option value="all">所有科目</option>` +
-            (window.appData.subjects || []).map(s => `<option value="${s}">${s}</option>`).join('');
+            (window.appData.subjects || []).map(s => `<option value="${escHtml_(s)}">${escHtml_(s)}</option>`).join('');
         dispatchSubFilter.value = curSub || "all";
     }
 }
@@ -1936,9 +1942,9 @@ function isStudentAllCompleted(studentId) {
     return tasks.length > 0 && tasks.every(t => t.teacherStatus === "已完成");
 }
 
-/* 共用：自然週（週一～週日）的日期範圍，offsetWeeks=0 本週、-1 上週，依本機時區計算 */
+/* 共用：自然週（週一～週日）的日期範圍，offsetWeeks=0 本週、-1 上週，依台灣時間計算 */
 function getWeekRange_(offsetWeeks = 0) {
-    const now = new Date();
+    const now = twNow_();
     now.setHours(0, 0, 0, 0);
     const day = now.getDay(); // 0=週日 ... 6=週六
     const diffToMonday = (day === 0 ? -6 : 1 - day);
@@ -2035,7 +2041,7 @@ function careIconHtml_(studentId, cls) {
 /* ===== 跑馬燈 =====
    每週二到週日顯示「上週 KPI 100%」的學生（週一不顯示），依完成的快慢排序（名單由後端算好放在 appData.champions）。
    老師端與學生端共用同一條。 */
-function renderMarquee_(now = new Date()) {
+function renderMarquee_(now = twNow_()) {
     const bar = document.getElementById("marqueeBar");
     const track = document.getElementById("marqueeTrack");
     if (!bar || !track) return;
@@ -2124,8 +2130,14 @@ const WEEKDAY_NAMES_ = ["星期日", "星期一", "星期二", "星期三", "星
 const CONTACT_BOOK_EXPIRED_DAYS = 10; // 過期區顯示天數；超過這天數後端會自動刪除（需與 Code.gs CONTACT_BOOK_KEEP_DAYS 一致）
 const contactBookExpiredOpen_ = { tcb: false, scb: false }; // 老師端／學生端「過期聯絡簿」是否展開
 
-// 本機時區的 YYYY-MM-DD（toISOString 是 UTC，台灣凌晨 0～8 點會差一天）
-function localDateStr_(d = new Date()) {
+// 台灣時間的「現在」：回傳一個 Date，它的年月日時分（getFullYear/getDate/getDay…）就是台灣當下的時間，
+// 不論這台電腦設定在哪個時區，日期、星期、本週/上週都和後端（Asia/Taipei）一致
+function twNow_() {
+    const now = new Date();
+    return new Date(now.getTime() + (now.getTimezoneOffset() + 480) * 60000);
+}
+// YYYY-MM-DD（預設＝台灣今天；toISOString 是 UTC，台灣凌晨 0～8 點會差一天，所以不用它）
+function localDateStr_(d = twNow_()) {
     const m = String(d.getMonth() + 1).padStart(2, "0");
     const day = String(d.getDate()).padStart(2, "0");
     return `${d.getFullYear()}-${m}-${day}`;
@@ -2340,6 +2352,57 @@ function addContactBookItemRow_(text, targets) {
     renumberContactBookItems_();
 }
 
+/* 老師端聯絡簿：只送「這一則」的新增／修改／刪除（後端逐筆套用），不會把整份資料存回去而蓋掉別處的修改 */
+async function patchWithRetry_(ops) {
+    let lastErr = null;
+    for (let i = 0; i < 6; i++) {
+        try {
+            const result = await gasPost_("patch", { token: authToken, ops });
+            if (result && result.status === "busy") { const e = new Error(result.message || "伺服器忙碌中"); e.retryable = true; throw e; }
+            if (!result || result.status !== "success") throw new Error((result && result.message) || "更新失敗");
+            return result;
+        } catch (e) {
+            lastErr = e;
+            if (e && e.unauthorized) break;
+            if (!_isRetryable(e)) break;
+            await _sleep(Math.min(1000 * Math.pow(2, i), 8000) + Math.random() * 1000);
+        }
+    }
+    throw lastErr;
+}
+async function contactBookPatch_(op, mutateLocal) {
+    const snapshot = JSON.stringify(window.appData.contactBook || []);
+    mutateLocal();
+    renderContactBook();
+    window._teacherPatching = true;
+    window._saveSeq++;
+    showBusy_("同步中，請稍候…");
+    let ok = false;
+    try {
+        const result = await patchWithRetry_([op]);
+        if (Array.isArray(result.contactBook)) window.appData.contactBook = result.contactBook;
+        ok = true;
+    } catch (e) {
+        if (e && /未知的 op|ids 必須是/.test(e.message || "")) {
+            // 後端還是舊版（尚未重新部署）：改用整份儲存，功能照常
+            window._teacherPatching = false;
+            hideBusy_();
+            return await window.saveData();
+        }
+        window.appData.contactBook = JSON.parse(snapshot);
+        hideBusy_();
+        if (e && e.unauthorized) clearAuthAndLogout("登入已過期，剛才的修改尚未儲存，請重新登入後再操作一次。");
+        else alert("聯絡簿尚未成功儲存，已退回原狀，請稍後再試一次。\n\n錯誤：" + ((e && e.message) || e));
+    } finally {
+        window._teacherPatching = false;
+        window._saveSeq++;
+        hideBusy_();
+        renderContactBook();
+        if (ok) showDoneToast_("已同步完成");
+    }
+    return ok;
+}
+
 async function saveContactBookEntry() {
     const id = document.getElementById("contactBookEditId").value;
     const date = document.getElementById("contactBookDateInput").value;
@@ -2353,29 +2416,28 @@ async function saveContactBookEntry() {
 
     if (!Array.isArray(window.appData.contactBook)) window.appData.contactBook = [];
     const weekday = weekdayOf_(date);
+    let entry;
     if (id) {
-        const entry = window.appData.contactBook.find(x => x.id === id);
-        if (!entry) { alert("找不到這筆聯絡簿，可能已被刪除。"); closeModal("contactBookModal"); return; }
-        entry.date = date;
-        entry.weekday = weekday;
-        entry.content = content;
-        entry.items = items;
+        const cur = window.appData.contactBook.find(x => x.id === id);
+        if (!cur) { alert("找不到這筆聯絡簿，可能已被刪除。"); closeModal("contactBookModal"); return; }
+        entry = { ...cur, date, weekday, content, items };
     } else {
-        window.appData.contactBook.push({
-            id: "cb_" + Date.now() + "_" + Math.random().toString(36).substr(2, 4),
-            date, weekday, content, items
-        });
+        entry = { id: "cb_" + Date.now() + "_" + Math.random().toString(36).substr(2, 4), date, weekday, content, items };
     }
     closeModal("contactBookModal");
-    await window.saveData();
+    await contactBookPatch_({ op: "cbSet", entry }, () => {
+        const i = window.appData.contactBook.findIndex(x => x.id === entry.id);
+        if (i >= 0) window.appData.contactBook[i] = entry; else window.appData.contactBook.push(entry);
+    });
 }
 
 async function deleteContactBookEntry(id) {
     const entry = (window.appData.contactBook || []).find(x => x.id === id);
     if (!entry) return;
     if (!confirm(`確定要刪除 ${entry.date} ${weekdayOf_(entry.date)} 的這筆聯絡簿嗎？`)) return;
-    window.appData.contactBook = window.appData.contactBook.filter(x => x.id !== id);
-    await window.saveData();
+    await contactBookPatch_({ op: "cbDelete", id }, () => {
+        window.appData.contactBook = window.appData.contactBook.filter(x => x.id !== id);
+    });
 }
 
 /* 老師端：上週／本週 KPI 名單與需要關懷名單 */
@@ -2482,7 +2544,7 @@ function renderSubjectCompletionRates() {
                 <div class="space-y-1">
                     <div class="flex justify-between items-center text-xs">
                         <span class="font-bold text-slate-700 flex items-center">
-                            ${sub}
+                            ${escHtml_(sub)}
                             ${isWarning ? `<span class="ml-1.5 px-1.5 py-0.2 bg-rose-100 text-rose-700 rounded text-[10px] font-extrabold flex items-center"><i class="fa-solid fa-triangle-exclamation mr-1"></i>完成率偏低</span>` : ''}
                         </span>
                         <span class="${textColor}">${completed}/${total} 項 (${rate}%)</span>
@@ -2577,16 +2639,16 @@ function renderTeacherTasksTable() {
                 </td>
                 <td class="px-3 sm:px-4 py-3 font-bold text-slate-800 flex items-center gap-1.5">
                     <span class="relative inline-block">${student.avatar || '👨‍🎓'}${isStudentAllCompleted(t.studentId) ? '<span class="absolute -top-2.5 -left-1.5 text-xs" title="100% 全數完成優良獎章！">👑</span>' : ''}${careIconHtml_(t.studentId, 'absolute -top-2.5 -left-1.5 text-xs')}</span>
-                    <span>${student.name}</span>
+                    <span>${escHtml_(student.name)}</span>
                 </td>
                 <td class="px-3 sm:px-4 py-3 text-slate-500 text-xs">${fullClass}</td>
                 <td class="px-3 sm:px-4 py-3 font-semibold">
                     <span class="${t.type === '作業' ? 'text-blue-600 bg-blue-50' : 'text-purple-600 bg-purple-50'} px-2 py-0.5 rounded text-xs">
-                        ${t.type} - ${t.subject}
+                        ${escHtml_(t.type)} - ${escHtml_(t.subject)}
                     </span>
                 </td>
                 <td class="px-3 sm:px-4 py-3 font-bold text-slate-700">
-                    ${t.title}
+                    ${escHtml_(t.title)}
                     ${t.pendingReview ? `<span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-500 text-white animate-pulse"><i class="fa-solid fa-bell mr-1"></i>待審核</span>` : ''}
                 </td>
                 <td class="px-3 sm:px-4 py-3 text-slate-500 text-xs font-mono">${t.date}</td>
@@ -2718,7 +2780,7 @@ async function teacherReviewPatch_(ids, status) {
         hideBusy_();
         window.appData.tasks.forEach(t => { const o = snapshot[String(t.id)]; if (o) Object.assign(t, o); });
         renderTeacherTasksTable();
-        if (lastErr && lastErr.unauthorized) clearAuthAndLogout("登入已過期或沒有權限，請重新登入。");
+        if (lastErr && lastErr.unauthorized) clearAuthAndLogout("登入已過期（超過 6 小時沒有操作），剛才的審核尚未儲存。\n請重新登入後再審核一次。");
         else alert("審核尚未成功儲存，已退回原狀，請稍後再試一次。\n\n錯誤：" + ((lastErr && lastErr.message) || lastErr));
         return false;
     } finally {
@@ -2826,9 +2888,9 @@ function renderDispatchManagement() {
                         <div>
                             <div class="flex items-center space-x-2">
                                 <span class="font-bold text-xs ${g.type === '作業' ? 'text-blue-600 bg-blue-50' : 'text-purple-600 bg-purple-50'} px-2 py-0.5 rounded">
-                                    ${g.subject}
+                                    ${escHtml_(g.subject)}
                                 </span>
-                                <h4 class="font-bold text-slate-800 text-xs sm:text-sm">${g.title}</h4>
+                                <h4 class="font-bold text-slate-800 text-xs sm:text-sm">${escHtml_(g.title)}</h4>
                                 ${isArchived ? '<span class="bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded text-[10px] font-extrabold"><i class="fa-solid fa-box-archive mr-1"></i>100%已歸檔</span>' : ''}
                             </div>
                             <p class="text-[11px] text-slate-400 mt-0.5">發布日期：${g.date} | 完成進度：${g.completedCount}/${assignedCount}</p>
@@ -2917,11 +2979,11 @@ function openSingleEditDispatchModal(idsStr) {
     document.getElementById("singleEditTypeSelect").value = sampleTask.type;
 
     const subSelect = document.getElementById("singleEditSubjectSelect");
-    subSelect.innerHTML = (window.appData.subjects || []).map(s => `<option value="${s}">${s}</option>`).join('');
+    subSelect.innerHTML = (window.appData.subjects || []).map(s => `<option value="${escHtml_(s)}">${escHtml_(s)}</option>`).join('');
     subSelect.value = sampleTask.subject;
 
     const gradeSelect = document.getElementById("singleEditGradeSelect");
-    gradeSelect.innerHTML = (window.appData.grades || []).map(g => `<option value="${g}">${g}</option>`).join('');
+    gradeSelect.innerHTML = (window.appData.grades || []).map(g => `<option value="${escHtml_(g)}">${escHtml_(g)}</option>`).join('');
 
     const assignedStudentIds = window.appData.tasks.filter(t => ids.includes(t.id)).map(t => t.studentId);
     const targetSelect = document.getElementById("singleEditAssignTarget");
@@ -2942,8 +3004,8 @@ function renderSingleEditStudentCheckboxes(selectedIds = []) {
     if (!container) return;
     container.innerHTML = window.appData.students.map(s => `
         <label class="flex items-center space-x-1.5 font-bold text-slate-700 cursor-pointer">
-            <input type="checkbox" value="${s.id}" ${selectedIds.includes(s.id) ? 'checked' : ''} class="single-edit-st-cb rounded text-indigo-600">
-            <span>${s.school ? `<span class="text-slate-400 font-medium">${s.school}</span> ` : ''}${s.name} (${s.grade})</span>
+            <input type="checkbox" value="${escHtml_(s.id)}" ${selectedIds.includes(s.id) ? 'checked' : ''} class="single-edit-st-cb rounded text-indigo-600">
+            <span>${s.school ? `<span class="text-slate-400 font-medium">${escHtml_(s.school)}</span> ` : ''}${escHtml_(s.name)} (${escHtml_(s.grade)})</span>
         </label>
     `).join('');
 }
@@ -2972,9 +3034,11 @@ async function saveSingleDispatchEdit() {
         return;
     }
 
-    const isDuplicate = window.appData.tasks.some(t => !oldIds.includes(t.id) && t.title === newTitle);
+    // 同名沒關係，但「類型＋科目＋名稱＋日期」四項都一樣就是同一個項目，不允許重複
+    const isDuplicate = window.appData.tasks.some(t => !oldIds.includes(t.id) &&
+        t.type === newType && t.subject === newSub && t.title === newTitle && t.date === newDate);
     if (isDuplicate) {
-        alert(`❌ 派發修改失敗：已有相同的項目名稱「${newTitle}」，請使用其他名稱！`);
+        alert(`❌ 派發修改失敗：已有相同的項目（${newType}／${newSub}／${newTitle}／${newDate}），請改日期或名稱！`);
         return;
     }
 
@@ -3029,10 +3093,10 @@ function openBatchEditDispatchModal() {
     }
     const subSelect = document.getElementById("batchEditSubjectSelect");
     subSelect.innerHTML = `<option value="">(保持不變)</option>` + 
-        (window.appData.subjects || []).map(s => `<option value="${s}">${s}</option>`).join('');
+        (window.appData.subjects || []).map(s => `<option value="${escHtml_(s)}">${escHtml_(s)}</option>`).join('');
 
     const targetGradeSelect = document.getElementById("batchTargetGradeSelect");
-    targetGradeSelect.innerHTML = (window.appData.grades || []).map(g => `<option value="${g}">${g}</option>`).join('');
+    targetGradeSelect.innerHTML = (window.appData.grades || []).map(g => `<option value="${escHtml_(g)}">${escHtml_(g)}</option>`).join('');
 
     document.getElementById("batchEditDateInput").value = "";
     document.getElementById("batchEditTitleInput").value = "";
@@ -3056,13 +3120,21 @@ async function confirmBatchEditDispatches() {
     const newTitle = document.getElementById("batchEditTitleInput").value.trim();
     const targetMode = document.getElementById("batchEditTargetSelect").value;
 
-    if (newTitle) {
-        const isDuplicate = window.appData.tasks.some(t => {
-            const key = `${t.type}_${t.subject}_${t.title}_${t.date}`;
-            return !selectedDispatchIds.has(key) && t.title === newTitle;
+    {
+        // 修改後的「類型＋科目＋名稱＋日期」不能和沒被選取的項目、或其他被選取的項目重複
+        const keyOf = (ty, su, ti, da) => `${ty}_${su}_${ti}_${da}`;
+        const others = new Set(window.appData.tasks.map(t => keyOf(t.type, t.subject, t.title, t.date)).filter(k => !selectedDispatchIds.has(k)));
+        const seen = new Set();
+        let dup = null;
+        selectedDispatchIds.forEach(k => {
+            const smp = window.appData.tasks.find(t => keyOf(t.type, t.subject, t.title, t.date) === k);
+            if (!smp) return;
+            const nk = keyOf(newType || smp.type, newSub || smp.subject, newTitle || smp.title, newDate || smp.date);
+            if (others.has(nk) || seen.has(nk)) dup = nk;
+            seen.add(nk);
         });
-        if (isDuplicate) {
-            alert(`❌ 批次修改失敗：已有相同的項目名稱「${newTitle}」，請更換名稱！`);
+        if (dup) {
+            alert(`❌ 批次修改失敗：修改後會出現完全相同的項目，請調整日期或名稱！`);
             return;
         }
     }
@@ -3219,8 +3291,8 @@ function renderStudentsCards() {
                             ${careIconHtml_(s.id, 'absolute -top-3 -left-2 text-base drop-shadow-md')}
                         </div>
                         <div>
-                            <h4 class="font-bold text-slate-800 text-sm sm:text-base">${s.name}</h4>
-                            <p class="text-xs text-slate-400">${s.school} · ${s.grade} ${s.className || ''}</p>
+                            <h4 class="font-bold text-slate-800 text-sm sm:text-base">${escHtml_(s.name)}</h4>
+                            <p class="text-xs text-slate-400">${escHtml_(s.school)} · ${escHtml_(s.grade)} ${escHtml_(s.className || '')}</p>
                         </div>
                     </div>
                     ${pwdText
@@ -3289,7 +3361,7 @@ function openAddStudentModal() {
     document.getElementById("studentPwdInput").placeholder = "4位數字";
 
     const gradeSelect = document.getElementById("studentGradeInput");
-    gradeSelect.innerHTML = (window.appData.grades || []).map(g => `<option value="${g}">${g}</option>`).join('');
+    gradeSelect.innerHTML = (window.appData.grades || []).map(g => `<option value="${escHtml_(g)}">${escHtml_(g)}</option>`).join('');
     renderAvatarPicker_(gradeAvatar_(gradeSelect.value));
 
     openModal("studentModal");
@@ -3309,7 +3381,7 @@ function openEditStudentModal(id) {
     document.getElementById("studentPwdInput").placeholder = student.pwdPlain ? "4位數字" : "舊密碼無法還原，留空＝不變更";
 
     const gradeSelect = document.getElementById("studentGradeInput");
-    gradeSelect.innerHTML = (window.appData.grades || []).map(g => `<option value="${g}">${g}</option>`).join('');
+    gradeSelect.innerHTML = (window.appData.grades || []).map(g => `<option value="${escHtml_(g)}">${escHtml_(g)}</option>`).join('');
     gradeSelect.value = student.grade;
     renderAvatarPicker_(student.avatar || gradeAvatar_(student.grade));
 
@@ -3420,7 +3492,7 @@ function openBatchAddStudentModal() {
     document.getElementById("batchStudentNamesInput").value = "";
 
     const gradeSelect = document.getElementById("batchStudentGradeInput");
-    gradeSelect.innerHTML = (window.appData.grades || []).map(g => `<option value="${g}">${g}</option>`).join('');
+    gradeSelect.innerHTML = (window.appData.grades || []).map(g => `<option value="${escHtml_(g)}">${escHtml_(g)}</option>`).join('');
 
     openModal("batchAddStudentModal");
 }
@@ -3472,7 +3544,7 @@ function batchChangeGradeModal() {
     }
 
     const select = document.getElementById("targetGradeSelect");
-    select.innerHTML = (window.appData.grades || []).map(g => `<option value="${g}">${g}</option>`).join('');
+    select.innerHTML = (window.appData.grades || []).map(g => `<option value="${escHtml_(g)}">${escHtml_(g)}</option>`).join('');
 
     openModal("batchChangeGradeModal");
 }
@@ -3511,11 +3583,11 @@ function renderSubjectsAndGradesTags() {
     if (gradeContainer) {
         gradeContainer.innerHTML = (window.appData.grades || []).map(g => `
             <span class="inline-flex items-center bg-slate-100 text-slate-700 px-3 py-1.5 rounded-xl text-xs font-bold border border-slate-200">
-                ${g}
-                <select onchange="setGradeAvatar_('${g}', this.value)" title="選擇${g}統一使用的頭像" class="ml-2 bg-white border border-slate-300 rounded-lg px-1 py-0.5 text-base leading-none">
+                ${escHtml_(g)}
+                <select data-v="${escHtml_(g)}" onchange="setGradeAvatar_(this.dataset.v, this.value)" title="選擇${escHtml_(g)}統一使用的頭像" class="ml-2 bg-white border border-slate-300 rounded-lg px-1 py-0.5 text-base leading-none">
                     ${AVATAR_OPTIONS.map(a => `<option value="${a}" ${a === gradeAvatar_(g) ? 'selected' : ''}>${a}</option>`).join('')}
                 </select>
-                <button onclick="removeGrade('${g}')" class="ml-2 text-slate-400 hover:text-rose-500"><i class="fa-solid fa-xmark"></i></button>
+                <button data-v="${escHtml_(g)}" onclick="removeGrade(this.dataset.v)" class="ml-2 text-slate-400 hover:text-rose-500"><i class="fa-solid fa-xmark"></i></button>
             </span>
         `).join('');
     }
@@ -3523,8 +3595,8 @@ function renderSubjectsAndGradesTags() {
     if (subjectContainer) {
         subjectContainer.innerHTML = (window.appData.subjects || []).map(s => `
             <span class="inline-flex items-center bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-xl text-xs font-bold border border-indigo-100">
-                ${s}
-                <button onclick="removeSubject('${s}')" class="ml-2 text-indigo-400 hover:text-rose-500"><i class="fa-solid fa-xmark"></i></button>
+                ${escHtml_(s)}
+                <button data-v="${escHtml_(s)}" onclick="removeSubject(this.dataset.v)" class="ml-2 text-indigo-400 hover:text-rose-500"><i class="fa-solid fa-xmark"></i></button>
             </span>
         `).join('');
     }
@@ -3547,6 +3619,11 @@ async function saveNewGrade() {
 }
 
 async function removeGrade(name) {
+    const n = (window.appData.students || []).filter(x => x.grade === name).length;
+    if (n > 0) {
+        alert(`「${name}」還有 ${n} 位學生，無法刪除這個年級。\n請先把這些學生改到其他年級，或刪除這些學生後再試。`);
+        return;
+    }
     if (!confirm(`確定要刪除「${name}」年級選項嗎？`)) return;
     window.appData.grades = window.appData.grades.filter(g => g !== name);
     await window.saveData();
@@ -3569,8 +3646,13 @@ async function saveNewSubject() {
 }
 
 async function removeSubject(name) {
-    if (!confirm(`確定要刪除「${name}」科目嗎？`)) return;
+    const used = (window.appData.tasks || []).filter(t => t.subject === name);
+    const msg = used.length
+        ? `「${name}」科目已有 ${used.length} 筆作業／考卷紀錄。\n刪除科目會一併刪除這些紀錄，且無法復原。\n\n確定要刪除嗎？`
+        : `確定要刪除「${name}」科目嗎？`;
+    if (!confirm(msg)) return;
     window.appData.subjects = window.appData.subjects.filter(s => s !== name);
+    window.appData.tasks = window.appData.tasks.filter(t => t.subject !== name);
     await window.saveData();
 }
 
@@ -3582,7 +3664,7 @@ function openAssignTaskModal() {
     addDynamicTaskRow();
 
     const gradeSelect = document.getElementById("taskGradeSelect");
-    gradeSelect.innerHTML = (window.appData.grades || []).map(g => `<option value="${g}">${g}</option>`).join('');
+    gradeSelect.innerHTML = (window.appData.grades || []).map(g => `<option value="${escHtml_(g)}">${escHtml_(g)}</option>`).join('');
 
     renderAssignTaskStudentCheckboxes();
     toggleMultiSelectMode();
@@ -3596,7 +3678,7 @@ function renderAssignTaskStudentCheckboxes() {
     container.innerHTML = window.appData.students.map(s => `
         <label class="flex items-center space-x-1.5 font-bold text-slate-700 cursor-pointer">
             <input type="checkbox" value="${s.id}" class="task-st-cb rounded text-indigo-600">
-            <span>${s.school ? `<span class="text-slate-400 font-medium">${s.school}</span> ` : ''}${s.name} (${s.grade})</span>
+            <span>${s.school ? `<span class="text-slate-400 font-medium">${escHtml_(s.school)}</span> ` : ''}${escHtml_(s.name)} (${escHtml_(s.grade)})</span>
         </label>
     `).join('');
 }
@@ -3614,7 +3696,7 @@ function addDynamicTaskRow() {
     const container = document.getElementById("dynamicTaskRowsContainer");
     const rowId = "task_row_" + Date.now() + "_" + Math.random().toString(36).substr(2, 4);
 
-    const subjectsOptions = (window.appData.subjects || []).map(s => `<option value="${s}">${s}</option>`).join('');
+    const subjectsOptions = (window.appData.subjects || []).map(s => `<option value="${escHtml_(s)}">${escHtml_(s)}</option>`).join('');
 
     const rowHtml = `
         <div id="${rowId}" class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs relative">
@@ -3787,7 +3869,7 @@ function renderStudentDashboard(student) {
     if (subFilter) {
         const curSub = subFilter.value;
         subFilter.innerHTML = `<option value="all">所有科目</option>` +
-            (window.appData.subjects || []).map(s => `<option value="${s}">${s}</option>`).join('');
+            (window.appData.subjects || []).map(s => `<option value="${escHtml_(s)}">${escHtml_(s)}</option>`).join('');
         subFilter.value = curSub || "all";
     }
 
@@ -3912,9 +3994,9 @@ function renderStudentDashboardContent() {
                         <div>
                             <div class="flex items-center space-x-2">
                                 <span class="font-bold text-xs ${t.type === '作業' ? 'text-blue-600 bg-blue-50' : 'text-purple-600 bg-purple-50'} px-2 py-0.5 rounded">
-                                    ${t.subject}
+                                    ${escHtml_(t.subject)}
                                 </span>
-                                <h4 class="font-bold text-slate-800 text-xs sm:text-sm ${checkedNow ? 'line-through text-slate-400' : ''}">${t.title}</h4>
+                                <h4 class="font-bold text-slate-800 text-xs sm:text-sm ${checkedNow ? 'line-through text-slate-400' : ''}">${escHtml_(t.title)}</h4>
                             </div>
                             <p class="text-[11px] text-slate-400 mt-1">發布日期：${t.date}</p>
                         </div>
