@@ -2994,9 +2994,17 @@ async function saveSingleDispatchEdit() {
         return;
     }
 
+    // 原本就有這個項目的學生：只更新欄位、保留審核狀態；新增的學生才建立新項目；取消的學生才移除
+    const oldTasks = window.appData.tasks.filter(t => oldIds.includes(t.id));
+    const oldByStudent = {};
+    oldTasks.forEach(t => { if (!oldByStudent[t.studentId]) oldByStudent[t.studentId] = t; });
     window.appData.tasks = window.appData.tasks.filter(t => !oldIds.includes(t.id));
-
     targetStudentIds.forEach(stId => {
+        const prev = oldByStudent[stId];
+        if (prev) {
+            window.appData.tasks.push({ ...prev, type: newType, subject: newSub, title: newTitle, date: newDate });
+            return;
+        }
         window.appData.tasks.push({
             id: "t_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5),
             studentId: stId,
@@ -3080,9 +3088,17 @@ async function confirmBatchEditDispatches() {
             targetStudentIds = matchingTasks.map(t => t.studentId);
         }
 
+        const prevByStudent = {};
+        matchingTasks.forEach(t => { if (!prevByStudent[t.studentId]) prevByStudent[t.studentId] = t; });
         window.appData.tasks = window.appData.tasks.filter(t => `${t.type}_${t.subject}_${t.title}_${t.date}` !== key);
 
+        // 已有此項目的學生保留審核狀態，只更新欄位；新增的學生才建立新項目
         targetStudentIds.forEach(stId => {
+            const prev = prevByStudent[stId];
+            if (prev) {
+                window.appData.tasks.push({ ...prev, type: finalType, subject: finalSub, title: finalTitle, date: finalDate });
+                return;
+            }
             window.appData.tasks.push({
                 id: "t_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5),
                 studentId: stId,
