@@ -2126,6 +2126,27 @@ function showBusy_(text) {
 function hideBusy_() {
     document.getElementById("busyOverlay")?.classList.add("hidden");
 }
+/* 等太久（多人同時送出、後端排隊）時，把遮罩文字換成排隊提示並顯示已等待秒數，
+   讓學生知道不是當機、不要重複按或關掉頁面。用法：const hint = startBusyWaitHint_(); …; hint.stop(); */
+function startBusyWaitHint_() {
+    const t0 = Date.now();
+    let busyHits = 0;
+    const timer = setInterval(() => {
+        const sec = Math.floor((Date.now() - t0) / 1000);
+        if (sec < 3) return;
+        const el = document.getElementById("busyOverlayText");
+        if (!el) return;
+        let msg = `目前同時送出的人比較多，正在排隊處理中…（已等待 ${sec} 秒）`;
+        if (busyHits > 0) msg += `\n伺服器忙碌，正在自動重試（第 ${busyHits + 1} 次）`;
+        msg += "\n請不要關閉或重新整理頁面";
+        el.innerText = msg;
+        el.style.whiteSpace = "pre-line";
+    }, 1000);
+    return {
+        noteBusy() { busyHits++; },
+        stop() { clearInterval(timer); const el = document.getElementById("busyOverlayText"); if (el) el.style.whiteSpace = ""; }
+    };
+}
 let _doneToastTimer = null;
 function showDoneToast_(text) {
     let el = document.getElementById("doneToast");
@@ -3008,6 +3029,7 @@ async function teacherReviewPatch_(ids, status) {
     window._teacherPatching = true;
     window._saveSeq++;
     showBusy_("審核同步中，請稍候…");
+    const busyHint = startBusyWaitHint_();
     let reviewed = false;
     try {
         const ops = [];
@@ -3019,6 +3041,7 @@ async function teacherReviewPatch_(ids, status) {
             try {
                 const result = await gasPost_("patch", { token: authToken, ops });
                 if (result && result.status === "busy") {
+                    busyHint.noteBusy();
                     const e = new Error(result.message || "伺服器忙碌中");
                     e.retryable = true;
                     throw e;
@@ -3043,6 +3066,7 @@ async function teacherReviewPatch_(ids, status) {
         else alert("審核尚未成功儲存，已退回原狀，請稍後再試一次。\n\n錯誤：" + ((lastErr && lastErr.message) || lastErr));
         return false;
     } finally {
+        busyHint.stop();
         window._teacherPatching = false;
         window._saveSeq++;
         hideBusy_();
@@ -4386,6 +4410,7 @@ async function applyStudentChanges(changes) {
     let doneMsg = "";
     const onlyWithdraw = changes.every(c => !c.checked);
     showBusy_(onlyWithdraw ? "撤回中，請稍候…" : "送出審核中，請稍候…");
+    const busyHint = startBusyWaitHint_();
     try {
         while (window.isSavePending()) await _sleep(200);
 
@@ -4402,6 +4427,7 @@ async function applyStudentChanges(changes) {
             try {
                 const result = await gasPost_("patch", { token: authToken, ops: ops });
                 if (result && result.status === "busy") {
+                    busyHint.noteBusy();
                     const e = new Error(result.message || "伺服器忙碌中");
                     e.retryable = true;
                     throw e;
@@ -4438,6 +4464,7 @@ async function applyStudentChanges(changes) {
         alert("送出失敗，請檢查網路後再按一次「送出審核」。\n\n勾選內容仍保留在畫面上。\n\n錯誤：" + (e.message || e));
         return false;
     } finally {
+        busyHint.stop();
         studentSubmitting = false;
         hideBusy_();
         renderStudentDashboardContent();
