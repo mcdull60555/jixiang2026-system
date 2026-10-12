@@ -1263,7 +1263,23 @@
         };
     }
 
+    // 輪詢用的資料版本標記：只有「完整拿過一次資料」才有值，之後帶著它問後端「有沒有變」。
+    // 登入、登出、重新讀取公開資料時一律清空，避免拿舊身分的版本去跳過新身分的資料。
+    window._dataVersion = null;
+
+    // 連續輪詢失敗的次數；連續失敗 3 次才在畫面上顯示連線不穩，偶爾一次失敗不打擾
+    let _pollFailCount = 0;
+    function notePollSuccess_() {
+        if (_pollFailCount >= 3) updateConnectionStatus('connected');
+        _pollFailCount = 0;
+    }
+    function notePollFailure_() {
+        _pollFailCount++;
+        if (_pollFailCount === 3) updateConnectionStatus('error');
+    }
+
     async function loadDataFromSheets() {
+        window._dataVersion = null;
         updateConnectionStatus('connecting');
 
         try {
@@ -1307,6 +1323,7 @@
                 }
                 if (full && full.status === "success" && full.data) {
                     window.appData = normalizeAppData(full.data);
+                    window._dataVersion = full.version || null;
                     const beforeCount = window.appData.tasks.length;
                     checkAndCleanLifeCycleTasks();
                     if (isTeacherLoggedIn && window.appData.tasks.length !== beforeCount) {
@@ -1569,13 +1586,19 @@
         const seqAtStart = window._saveSeq;
 
         try {
-            const result = await gasPost_("data", { token: authToken });
+            // 第一次輪詢（建立「新送審通知」基準）一定拿完整資料；之後才帶版本標記問有沒有變
+            const result = await gasPost_("data", { token: authToken, since: teacherRealtimeInitialized ? (window._dataVersion || "") : "" });
             if (!result || result.status === "error") {
                 throw new Error(result?.message || "即時同步讀取失敗");
             }
+            notePollSuccess_();
+
+            // 雲端資料自上次以來沒有變動：不必重繪，也不必處理任何資料
+            if (result.unchanged) return;
 
             // 請求期間若發生過儲存，這份雲端資料已過期，直接丟棄
             if (window.isSavePending() || window._saveSeq !== seqAtStart) return;
+            window._dataVersion = result.version || null;
 
             const remoteTasks = Array.isArray(result.data && result.data.tasks) ? result.data.tasks : [];
             const pendingTasks = getPendingReviewTasks(remoteTasks);
@@ -1613,18 +1636,38 @@
                 clearAuthAndLogout("登入已過期或沒有權限，請重新登入。");
             } else {
                 console.warn("老師端即時同步暫時失敗：", e);
+                notePollFailure_();
             }
         } finally {
             teacherRealtimeBusy = false;
         }
     }
 
+    // 老師端輪詢間隔：畫面在前景 15 秒一次；分頁在背景降到 60 秒一次（仍保留新送審通知）。
+    // 每次加一點隨機時間，避免多台裝置同一秒一起打後端。
+    const TEACHER_SYNC_VISIBLE_MS = 15000;
+    const TEACHER_SYNC_HIDDEN_MS = 60000;
+    function scheduleTeacherPoll_() {
+        if (teacherRealtimeTimer) clearTimeout(teacherRealtimeTimer);
+        const base = document.hidden ? TEACHER_SYNC_HIDDEN_MS : TEACHER_SYNC_VISIBLE_MS;
+        teacherRealtimeTimer = setTimeout(async () => {
+            try { await pollTeacherRealtimeData(); } finally { scheduleTeacherPoll_(); }
+        }, base + Math.random() * 2000);
+    }
+
+    let _teacherVisibilityBound = false;
     function startTeacherRealtimeSync() {
-        if (teacherRealtimeTimer) clearInterval(teacherRealtimeTimer);
+        if (teacherRealtimeTimer) clearTimeout(teacherRealtimeTimer);
         teacherRealtimeInitialized = false;
         teacherPendingReviewIds = new Set();
         pollTeacherRealtimeData();
-        teacherRealtimeTimer = setInterval(pollTeacherRealtimeData, 5000);
+        scheduleTeacherPoll_();
+        if (!_teacherVisibilityBound) {
+            _teacherVisibilityBound = true;
+            document.addEventListener("visibilitychange", () => {
+                if (!document.hidden) { pollTeacherRealtimeData(); scheduleTeacherPoll_(); } // 切回分頁馬上同步一次
+            });
+        }
     }
 
     document.addEventListener("DOMContentLoaded", () => {
@@ -1707,6 +1750,7 @@ function initIdleChecker() {
 }
 
 function clearAuthAndLogout(message, reloadPublic = true) {
+    window._dataVersion = null;
     const tokenToRevoke = authToken;
     isTeacherLoggedIn = false;
     loggedInStudentId = null;
@@ -1757,6 +1801,7 @@ async function verifyTeacherLogin() {
             loggedInStudentId = null;
             currentRole = "teacher";
             window.appData = normalizeAppData(result.data);
+            window._dataVersion = result.version || null;
             saveAuthState();
             closeModal("teacherLoginModal");
             renderRoleView();
@@ -1809,6 +1854,7 @@ async function verifyStudentLogin() {
             loggedInStudentId = result.studentId || stId;
             currentRole = "student";
             window.appData = normalizeAppData(result.data);
+            window._dataVersion = result.version || null;
             saveAuthState();
             closeModal("studentLoginModal");
             renderRoleView();
@@ -4314,11 +4360,18 @@ function updateStudentSubmitBar() {
 }
 
 // 從 Google 試算表讀最新完整資料（依身分裁切：學生只會拿到自己的 tasks）
-async function fetchLatestAppData() {
+// useSince=true（輪詢用）：帶著版本標記問後端，資料沒變就回傳 null，呼叫端什麼都不用做。
+// 版本標記只在「呼叫端確定採用這份資料」時才該更新，所以由呼叫端設定 window._dataVersion。
+async function fetchLatestAppData(useSince) {
     if (!authToken) throw new Error("尚未登入或登入已過期");
-    const result = await gasPost_("data", { token: authToken });
+    const body = { token: authToken };
+    if (useSince && window._dataVersion) body.since = window._dataVersion;
+    const result = await gasPost_("data", body);
+    if (result && result.status === "success" && result.unchanged) return null;
     if (!result || result.status !== "success") throw new Error((result && result.message) || "雲端讀取失敗");
-    return normalizeAppData(result.data);
+    const fresh = normalizeAppData(result.data);
+    fresh._version = result.version || null; // 暫存在回傳物件上，由呼叫端決定要不要採用
+    return fresh;
 }
 
 /* 送出/撤回一律用後端的逐筆 patch，後端會自己判斷能不能改，不會互相蓋掉 */
@@ -4406,7 +4459,7 @@ async function withdrawStudentSubmission(taskId) {
 }
 
 /* ===== 學生端定時同步：每 10 秒讀一次雲端，分頁在背景時暫停 ===== */
-const STUDENT_SYNC_INTERVAL_MS = 10000;
+const STUDENT_SYNC_INTERVAL_MS = 20000;
 let studentRealtimeTimer = null;
 let studentRealtimeBusy = false;
 
@@ -4419,9 +4472,13 @@ async function pollStudentRealtimeData() {
     studentRealtimeBusy = true;
     const seqAtStart = window._saveSeq;
     try {
-        const fresh = await fetchLatestAppData();
+        const fresh = await fetchLatestAppData(true);
+        notePollSuccess_();
+        if (fresh === null) return; // 雲端資料自上次以來沒有變動
         // 請求期間若有儲存或正在送出，這份雲端資料已過期，直接丟棄
         if (window.isSavePending() || window._saveSeq !== seqAtStart || studentSubmitting) return;
+        window._dataVersion = fresh._version || null;
+        delete fresh._version;
 
         const before = JSON.stringify([window.appData.tasks, window.appData.students, window.appData.contactBook, window.appData.champions]);
         const after = JSON.stringify([fresh.tasks, fresh.students, fresh.contactBook, fresh.champions]);
@@ -4448,15 +4505,24 @@ async function pollStudentRealtimeData() {
             clearAuthAndLogout("登入已過期或沒有權限，請重新登入。");
         } else {
             console.warn("學生端定時同步暫時失敗：", e);
+            notePollFailure_();
         }
     } finally {
         studentRealtimeBusy = false;
     }
 }
 
+// 每次加一點隨機時間，避免全班同一秒一起打後端
+function scheduleStudentPoll_() {
+    if (studentRealtimeTimer) clearTimeout(studentRealtimeTimer);
+    studentRealtimeTimer = setTimeout(async () => {
+        try { await pollStudentRealtimeData(); } finally { scheduleStudentPoll_(); }
+    }, STUDENT_SYNC_INTERVAL_MS + Math.random() * 5000);
+}
+
 function startStudentRealtimeSync() {
-    if (studentRealtimeTimer) clearInterval(studentRealtimeTimer);
-    studentRealtimeTimer = setInterval(pollStudentRealtimeData, STUDENT_SYNC_INTERVAL_MS);
+    if (studentRealtimeTimer) clearTimeout(studentRealtimeTimer);
+    scheduleStudentPoll_();
     document.addEventListener("visibilitychange", () => {
         if (!document.hidden) pollStudentRealtimeData(); // 切回分頁時立刻同步一次
     });

@@ -30,9 +30,9 @@
  */
 
 // 後端版本：用瀏覽器開 /exec 網址可看到，確認部署的是新版
-const BACKEND_VERSION = "2026-10-10-v7-resubmit";
-const SUBMIT_LOG_KEEP_DAYS = 120;   // 送審／審核紀錄保留天數（和作業 120 天生命週期一致）
-const SUBMIT_LOG_MAX = 3000;        // 最多保留筆數，避免試算表過大
+const BACKEND_VERSION = "2026-10-12-v8-cache";
+const SUBMIT_LOG_KEEP_DAYS = 45;    // 送審／審核紀錄保留天數（整份資料每次都要讀寫，紀錄太多會拖慢速度）
+const SUBMIT_LOG_MAX = 1000;        // 最多保留筆數，避免試算表過大
 const CONTACT_BOOK_KEEP_DAYS = 10; // 聯絡簿日期超過這麼多天就自動刪除
 const APP_TZ = "Asia/Taipei"; // 週的計算（週一～週日）固定用台灣時間
 const DATA_SHEET_NAME = "__APP_DATA__";
@@ -57,20 +57,115 @@ function jsonResponse_(obj) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-function readStoredJson_() {
+/* ------------------------------------------------------------------
+ * 整份資料的快取與版本號
+ *   每個請求原本都要把整份 JSON 從試算表讀出來再解析，人一多就排隊。
+ *   現在：讀取優先用 CacheService（gzip + base64，切成多段）；寫入時同步更新快取，
+ *   並把「版本號」寫在隱藏資料表的 B1。前端輪詢帶著版本號來問，沒變就只回「沒變」。
+ *   快取被 Google 提早清掉也沒關係，會自動退回讀試算表並重新建立快取。
+ * ------------------------------------------------------------------ */
+const DATA_CACHE_TTL_SEC = 21600;
+const DATA_CACHE_CHUNK = 90000;        // CacheService 單筆上限 100KB，保守用 90000 字元
+const DATA_CACHE_MAX_CHUNKS = 40;      // 壓縮後還是太大就不快取，直接讀試算表
+const DATA_VERSION_CELL = "B1";
+
+function newDataVersion_() {
+  return Date.now().toString(36) + Math.floor(Math.random() * 1679616).toString(36);
+}
+
+function readSheetVersion_(sheet) {
+  try {
+    const v = sheet.getRange(DATA_VERSION_CELL).getValue();
+    return v == null || v === "" ? "0" : String(v);
+  } catch (err) {
+    return "0";
+  }
+}
+
+function invalidateDataCache_() {
+  try { CacheService.getScriptCache().remove("dat:meta"); } catch (err) { /* 忽略 */ }
+}
+
+function readCachedStored_() {
+  try {
+    const cache = CacheService.getScriptCache();
+    const metaRaw = cache.get("dat:meta");
+    if (!metaRaw) return null;
+    const meta = JSON.parse(metaRaw);
+    const keys = [];
+    for (let i = 0; i < meta.n; i++) keys.push("dat:c" + i);
+    const got = cache.getAll(keys);
+    let b64 = "";
+    for (let i = 0; i < meta.n; i++) {
+      const part = got["dat:c" + i];
+      if (part == null) return null;
+      b64 += part;
+    }
+    if (b64.length !== meta.len) return null;
+    const gz = Utilities.newBlob(Utilities.base64Decode(b64), "application/x-gzip", "d.gz");
+    const json = Utilities.ungzip(gz).getDataAsString();
+    return { version: String(meta.v), json: json };
+  } catch (err) {
+    return null; // 快取壞掉或讀到寫到一半的內容：當作沒有快取，退回讀試算表
+  }
+}
+
+function writeCachedStored_(version, json) {
+  try {
+    const cache = CacheService.getScriptCache();
+    cache.remove("dat:meta"); // 先讓舊快取失效，避免讀到新舊混合的內容
+    const gz = Utilities.gzip(Utilities.newBlob(json, "text/plain", "d.txt"));
+    const b64 = Utilities.base64Encode(gz.getBytes());
+    const n = Math.max(1, Math.ceil(b64.length / DATA_CACHE_CHUNK));
+    if (n > DATA_CACHE_MAX_CHUNKS) return;
+    const put = {};
+    for (let i = 0; i < n; i++) {
+      put["dat:c" + i] = b64.substring(i * DATA_CACHE_CHUNK, (i + 1) * DATA_CACHE_CHUNK);
+    }
+    cache.putAll(put, DATA_CACHE_TTL_SEC);
+    cache.put("dat:meta", JSON.stringify({ v: version, n: n, len: b64.length }), DATA_CACHE_TTL_SEC);
+  } catch (err) {
+    invalidateDataCache_();
+  }
+}
+
+// 回傳 { version, json }；優先讀快取，沒有才讀試算表並重建快取
+function readStoredState_() {
+  const cached = readCachedStored_();
+  if (cached) return cached;
+
   const sheet = getDataSheet_();
+  const v1 = readSheetVersion_(sheet);
   const lastRow = sheet.getLastRow();
+  let json = "";
+  if (lastRow >= 1) {
+    const values = sheet.getRange(1, 1, lastRow, 1).getValues();
+    json = values
+      .map(row => row[0] == null ? "" : String(row[0]))
+      .join("");
+  }
+  const v2 = readSheetVersion_(sheet);
+  // 讀的期間版本沒變才建立快取，避免把寫到一半的資料存進去
+  if (json && v1 === v2) writeCachedStored_(v1, json);
+  return { version: v1, json: json };
+}
 
-  if (lastRow < 1) return "";
+function readStoredJson_() {
+  return readStoredState_().json;
+}
 
-  const values = sheet.getRange(1, 1, lastRow, 1).getValues();
-  return values
-    .map(row => row[0] == null ? "" : String(row[0]))
-    .join("");
+// 目前資料的版本號（很便宜：優先看快取的 meta，沒有才讀 B1 一格）
+function getDataVersion_() {
+  try {
+    const metaRaw = CacheService.getScriptCache().get("dat:meta");
+    if (metaRaw) return String(JSON.parse(metaRaw).v);
+  } catch (err) { /* 忽略 */ }
+  return readSheetVersion_(getDataSheet_());
 }
 
 function writeStoredJson_(json) {
   const sheet = getDataSheet_();
+  invalidateDataCache_();
 
   const chunks = [];
   for (let i = 0; i < json.length; i += CHUNK_SIZE) {
@@ -89,7 +184,12 @@ function writeStoredJson_(json) {
   if (prevLastRow > chunks.length) {
     sheet.getRange(chunks.length + 1, 1, prevLastRow - chunks.length, 1).clearContent();
   }
+
+  // 版本號最後才寫：看到新版本號就代表資料一定已經寫完
+  const version = newDataVersion_();
+  sheet.getRange(DATA_VERSION_CELL).setNumberFormat("@").setValue(version);
   SpreadsheetApp.flush();
+  writeCachedStored_(version, json);
 }
 
 function validateAppData_(data) {
@@ -289,8 +389,13 @@ function getSession_(token) {
   const raw = cache.get("tok:" + token);
   if (!raw) return null;
   try {
-    cache.put("tok:" + token, raw, SESSION_TTL_SEC); // 有在使用就延長
-    return JSON.parse(raw);
+    const s = JSON.parse(raw);
+    // 有在使用就延長；但不必每個請求都重寫快取，超過 30 分鐘才續一次
+    if (!s.t || Date.now() - s.t > 1800000) {
+      s.t = Date.now();
+      cache.put("tok:" + token, JSON.stringify(s), SESSION_TTL_SEC);
+    }
+    return { role: s.role, studentId: s.studentId || null };
   } catch (err) {
     return null;
   }
@@ -317,12 +422,23 @@ function unauthorized_() {
 /* ==================================================================
  * 資料讀取 / 依身分裁切
  * ================================================================== */
-function loadData_() {
-  const json = readStoredJson_();
-  if (!json) return null;
-  const data = JSON.parse(json);
+// 回傳 { data, version }；沒有資料時 data 為 null
+function loadDataState_() {
+  const state = readStoredState_();
+  if (!state.json) return { data: null, version: state.version };
+  const data = JSON.parse(state.json);
   validateAppData_(data);
-  return data;
+  return { data: data, version: state.version };
+}
+
+function loadData_() {
+  return loadDataState_().data;
+}
+
+// 版本標記 = 資料版本 + 今天日期。聯絡簿過期、上週冠軍都會隨日期改變，
+// 所以跨日後就算資料沒動，前端也會重新拿一次完整資料。
+function dataToken_(version) {
+  return String(version) + "|" + Utilities.formatDate(new Date(), APP_TZ, "yyyy-MM-dd");
 }
 
 function defaultData_() {
@@ -398,6 +514,12 @@ function contactBookKeep_(list, now) {
     return x && typeof x.date === "string" && x.date >= cutoff;
   });
 }
+// 有過期的聯絡簿才需要清；沒有就完全不用搶鎖、不用再讀一次資料
+function contactBookNeedsPurge_(data) {
+  if (!data || !Array.isArray(data.contactBook) || data.contactBook.length === 0) return false;
+  return contactBookKeep_(data.contactBook, new Date()).length !== data.contactBook.length;
+}
+
 // 在鎖內重新讀取、清除、寫回；拿不到鎖就略過（下次再清，顯示端本來就會過濾）
 function purgeContactBookStored_() {
   const lock = LockService.getScriptLock();
@@ -600,7 +722,8 @@ function handleLogin_(e) {
   }
 
   try {
-    const data = loadData_() || defaultData_();
+    const loginState = loadDataState_();
+    const data = loginState.data || defaultData_();
 
     let stored = null;
     if (role === "teacher") {
@@ -621,7 +744,7 @@ function handleLogin_(e) {
     if (role === "teacher") {
       const needs = data.students.some(function (s) { return s.pwd && !isHashed_(s.pwd); });
       if (needs && lock_tryMigrate_(data)) { /* data 已就地更新 */ }
-      purgeContactBookStored_();
+      if (contactBookNeedsPurge_(data)) purgeContactBookStored_();
     }
 
     if (check.legacy) upgradePwdHash_(role, studentId, plain);
@@ -633,7 +756,8 @@ function handleLogin_(e) {
       role: role,
       studentId: studentId || null,
       defaultTeacherPwd: role === "teacher" && plain === DEFAULT_TEACHER_PWD,
-      data: viewForSession_(data, session)
+      data: viewForSession_(data, session),
+      version: dataToken_(loginState.version)
     });
   } catch (err) {
     return jsonResponse_({ status: "error", message: err.toString() });
@@ -679,11 +803,21 @@ function handleData_(e) {
   if (!session) return unauthorized_();
 
   try {
-    if (session.role === "teacher") purgeContactBookStored_();
-    const data = loadData_() || (session.role === "teacher" ? defaultData_() : null);
+    // 輪詢：前端帶著上次拿到的版本標記來問，沒變就只回「沒變」，不必讀、不必傳整份資料
+    const since = typeof body.since === "string" ? body.since : "";
+    if (since && since === dataToken_(getDataVersion_())) {
+      return jsonResponse_({ status: "success", unchanged: true, version: since });
+    }
+
+    let state = loadDataState_();
+    // 聯絡簿有過期項目才清（以前是老師每次輪詢都搶鎖＋多讀一次整份資料）
+    if (session.role === "teacher" && contactBookNeedsPurge_(state.data)) {
+      if (purgeContactBookStored_() > 0) state = loadDataState_();
+    }
+    const data = state.data || (session.role === "teacher" ? defaultData_() : null);
     const view = data ? viewForSession_(data, session) : null;
     if (!view) return unauthorized_(); // 例如該學生已被老師刪除
-    return jsonResponse_({ status: "success", data: view });
+    return jsonResponse_({ status: "success", data: view, version: dataToken_(state.version) });
   } catch (err) {
     return jsonResponse_({ status: "error", message: err.toString() });
   }
