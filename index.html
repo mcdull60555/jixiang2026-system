@@ -33,8 +33,10 @@
             background-color: #f8fafc;
             -webkit-tap-highlight-color: transparent;
         }
-        @keyframes marquee-scroll { from { transform: translateX(100%); } to { transform: translateX(-100%); } }
-        .marquee-track { display: inline-block; white-space: nowrap; padding-left: 0; animation: marquee-scroll var(--marquee-dur, 30s) linear infinite; }
+        /* 首尾相接的連續循環：內容重複兩組，往左移動「一組」的寬度就無縫接回，不會有空白等待 */
+        @keyframes marquee-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+        .marquee-track { display: inline-block; white-space: nowrap; animation: marquee-scroll var(--marquee-dur, 30s) linear infinite; }
+        .marquee-item { display: inline-block; padding-right: 48px; }
         #marqueeBar:hover .marquee-track { animation-play-state: paused; }
         .modal-backdrop {
             background-color: rgba(15, 23, 42, 0.6);
@@ -2215,6 +2217,7 @@ function careIconHtml_(studentId, cls) {
 /* ===== 跑馬燈 =====
    每週二到週日顯示「上週 KPI 100%」的學生（週一不顯示），依老師最後一筆審核通過的時間排序、越早越前面（名單由後端算好放在 appData.champions）。
    老師端與學生端共用同一條。 */
+let _marqueeKey_ = "";
 function renderMarquee_(now = twNow_()) {
     const bar = document.getElementById("marqueeBar");
     const track = document.getElementById("marqueeTrack");
@@ -2227,19 +2230,46 @@ function renderMarquee_(now = twNow_()) {
     const list = Array.isArray(champions.list) ? champions.list : [];
     const showChampions = loggedIn && now.getDay() !== 1 && list.length > 0;
 
+    let html;
     if (showChampions) {
         const medals = ["🥇", "🥈", "🥉"];
         const names = list.map((c, i) =>
             `${medals[i] || "🌟"} ${escHtml_(c.name)}（${escHtml_([c.school, c.grade].filter(Boolean).join(" "))}）`).join("　");
         const range = champions.weekStart && champions.weekEnd ? `（${champions.weekStart.slice(5).replace("-", "/")}～${champions.weekEnd.slice(5).replace("-", "/")}）` : "";
-        track.innerHTML = `🎉 恭喜以下同學上週${range}完成所有進度！　${names}　太棒了，繼續保持！🎉`;
+        html = `🎉 恭喜以下同學上週${range}完成所有進度！　${names}　太棒了，繼續保持！🎉`;
     } else {
-        track.innerHTML = `📣 歡迎來到基翔小學通！按時完成作業、送出審核，上週全部完成的同學每週二會登上跑馬燈喔 ✨`;
+        html = `📣 歡迎來到基翔小學通！按時完成作業、送出審核，上週全部完成的同學每週二會登上跑馬燈喔 ✨`;
     }
     bar.classList.remove("hidden");
-    // 文字越長跑越久，維持差不多的閱讀速度
-    track.style.setProperty("--marquee-dur", Math.max(20, Math.round(track.textContent.length * 0.45)) + "s");
+
+    // 內容和寬度都沒變就不要重建，免得每次資料更新都讓跑馬燈從頭重跑
+    const cw = (track.parentElement || bar).clientWidth;
+    const key = html + "|" + cw;
+    if (key === _marqueeKey_) return;
+    _marqueeKey_ = key;
+    buildMarqueeTrack_(track, html, cw);
 }
+
+/* 連續循環：先量出「一段文字＋間隔」的寬度，重複到至少塞滿一個畫面寬（短文字才不會留下大空白），
+   再整組複製一份；動畫往左移動剛好一組的寬度，就無縫接回起點。每秒約移動 MARQUEE_SPEED_PX 像素。 */
+const MARQUEE_SPEED_PX = 70;
+function buildMarqueeTrack_(track, html, containerWidth) {
+    const item = `<span class="marquee-item">${html}</span>`;
+    track.style.animation = "none";
+    track.innerHTML = item;
+    const oneWidth = track.firstElementChild.getBoundingClientRect().width || 1;
+    const repeat = Math.max(1, Math.ceil(containerWidth / oneWidth));
+    track.innerHTML = item.repeat(repeat * 2);
+    const groupWidth = oneWidth * repeat;
+    track.style.setProperty("--marquee-dur", Math.max(8, Math.round(groupWidth / MARQUEE_SPEED_PX)) + "s");
+    void track.offsetWidth; // 強制重算版面，動畫才會從頭開始
+    track.style.animation = "";
+}
+let _marqueeResizeTimer_ = null;
+window.addEventListener("resize", () => {
+    clearTimeout(_marqueeResizeTimer_);
+    _marqueeResizeTimer_ = setTimeout(() => { if (typeof renderMarquee_ === "function") renderMarquee_(); }, 250);
+});
 
 /* 這個期間有項目、而且全部都老師審核完成 → 皇冠 */
 function isKpiFull_(k) {
