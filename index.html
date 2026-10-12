@@ -2752,8 +2752,8 @@ function renderKpiOverview() {
     const basisLabel = { all: "全部項目", this: "本週", last: "上週" }[basis] || "全部項目";
 
     // showTime：上週／本週名單才顯示「老師最後一筆審核通過」的時間（也就是同完成率時的排序依據）
-    const row = (s, k, showTime) => `
-        <button type="button" onclick="openStudentPendingModal('${escHtml_(s.id)}')"
+    const row = (s, k, showTime, period) => `
+        <button type="button" onclick="openStudentPendingModal('${escHtml_(s.id)}', '${period}')"
             class="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-left hover:border-indigo-300 hover:bg-indigo-50/50 transition">
             <span class="min-w-0 truncate text-xs font-bold text-slate-700">
                 ${s.school ? `<span class="text-slate-400 font-medium">${escHtml_(s.school)}</span> ` : ''}${escHtml_(s.name)}${isKpiFull_(k) ? ' 👑' : ''}
@@ -2774,7 +2774,7 @@ function renderKpiOverview() {
         document.getElementById(titleId).innerHTML =
             `<i class="${titleIcon} mr-1.5"></i> ${titleText}（${getWeekLabel_(period === 'last' ? -1 : 0)}）<span class="ml-1 text-slate-400 font-medium">${list.length} 人</span>`;
         el.innerHTML = list.length
-            ? list.map(x => row(x.s, x.k, true)).join("")
+            ? list.map(x => row(x.s, x.k, true, period)).join("")
             : `<div class="text-center text-slate-400 text-xs font-bold py-4">${emptyText}</div>`;
     };
     fill(lastEl, "kpiLastWeekTitle", "fa-solid fa-calendar-minus text-slate-500", "上週 KPI", "last", "上週沒有派發項目");
@@ -2787,22 +2787,25 @@ function renderKpiOverview() {
     document.getElementById("kpiCareTitle").innerHTML =
         `<i class="fa-solid fa-heart-pulse text-rose-500 mr-1.5"></i> 需要關懷（${basisLabel}低於 ${KPI_CARE_THRESHOLD}%）<span class="ml-1 text-rose-400 font-medium">${careList.length} 人</span>`;
     careEl.innerHTML = careList.length
-        ? careList.map(x => row(x.s, x.k)).join("")
+        ? careList.map(x => row(x.s, x.k, false, basis)).join("")
         : `<div class="text-center text-emerald-600 text-xs font-bold py-4">目前沒有低於 ${KPI_CARE_THRESHOLD}% 的學生 🎉</div>`;
 }
 
 /* 點學生姓名：列出尚未完成（含已送出待審核）與待訂正的項目 */
-function openStudentPendingModal(studentId) {
+function openStudentPendingModal(studentId, period) {
     const st = (window.appData.students || []).find(s => s.id === studentId);
     if (!st) return;
+    // period：'last' 只列上週項目、'this' 只列本週項目、其他（all）列全部；未到發布日的項目不列
+    const periodLabel = period === 'last' ? '上週' : period === 'this' ? '本週' : '';
     const pending = (window.appData.tasks || [])
-        .filter(t => t.studentId === studentId && t.teacherStatus !== "已完成")
+        .filter(t => t.studentId === studentId && t.teacherStatus !== "已完成" && isTaskStarted_(t)
+            && (!periodLabel || isDateInWeek_(t.date, period === 'last' ? -1 : 0)))
         .sort((a, b) => String(a.date).localeCompare(String(b.date)));
 
     document.getElementById("studentPendingTitle").innerText =
         `${[st.school, st.name].filter(Boolean).join(" ")}`;
     document.getElementById("studentPendingSub").innerText =
-        `${[st.grade, st.className].filter(Boolean).join(" ")} ・ 尚未完成／待訂正共 ${pending.length} 項`;
+        `${[st.grade, st.className].filter(Boolean).join(" ")} ・ ${periodLabel}尚未完成／待訂正共 ${pending.length} 項`;
 
     const box = document.getElementById("studentPendingList");
     box.innerHTML = pending.length ? pending.map(t => {
@@ -2820,7 +2823,7 @@ function openStudentPendingModal(studentId) {
                 </div>
                 <div class="text-[11px] text-slate-500 mt-0.5">${escHtml_(t.type)} ・ ${escHtml_(t.subject)} ・ 派發 ${escHtml_(t.date)}</div>
             </div>`;
-    }).join("") : '<div class="text-center text-emerald-600 font-bold py-6">全部項目都已完成 🎉</div>';
+    }).join("") : `<div class="text-center text-emerald-600 font-bold py-6">${periodLabel || '全部'}項目都已完成 🎉</div>`;
 
     openModal("studentPendingModal");
 }
