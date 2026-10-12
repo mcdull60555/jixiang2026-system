@@ -214,7 +214,7 @@
                         <h3 class="font-bold text-slate-800 flex items-center text-sm sm:text-base">
                             <i class="fa-solid fa-bullseye text-indigo-600 mr-2"></i> 學生週 KPI 與關懷名單
                         </h3>
-                        <p class="text-[11px] sm:text-xs text-slate-500">以派發日期落在該週（週一～週日）的項目計算，老師審核「已完成」才算完成。點學生姓名可查看尚未完成或待訂正的項目。</p>
+                        <p class="text-[11px] sm:text-xs text-slate-500">以派發日期落在該週（週一～週日）的項目計算，老師審核「已完成」才算完成。上週、本週名單依完成率由高到低排序，完成率相同時老師最後一筆審核通過越早排越前面。點學生姓名可查看尚未完成或待訂正的項目。</p>
                     </div>
                     <div class="flex items-center space-x-2 w-full md:w-auto shrink-0">
                         <label class="text-xs font-bold text-slate-600 shrink-0">關懷依據：</label>
@@ -2188,9 +2188,13 @@ function getStudentKpi(studentId, period) {
     const tasks = (window.appData.tasks || []).filter(t =>
         t.studentId === studentId && (period === 'all' || isDateInWeek_(t.date, offset)));
     const total = tasks.length;
-    const completed = tasks.filter(t => t.teacherStatus === "已完成").length;
+    const done = tasks.filter(t => t.teacherStatus === "已完成");
+    const completed = done.length;
     const rate = total > 0 ? Math.round((completed / total) * 100) : 0;
-    return { total, completed, rate };
+    // 老師「最後一筆」審核通過的時間（排序用：同樣完成率，越早排越前面）；沒有時間紀錄的舊資料為空字串
+    let lastApprovedAt = "";
+    done.forEach(t => { const ts = String(t.doneAt || t.reviewedAt || ""); if (ts > lastApprovedAt) lastApprovedAt = ts; });
+    return { total, completed, rate, lastApprovedAt };
 }
 
 function getStudentWeeklyKpi(studentId) {
@@ -2209,7 +2213,7 @@ function careIconHtml_(studentId, cls) {
 }
 
 /* ===== 跑馬燈 =====
-   每週二到週日顯示「上週 KPI 100%」的學生（週一不顯示），依完成的快慢排序（名單由後端算好放在 appData.champions）。
+   每週二到週日顯示「上週 KPI 100%」的學生（週一不顯示），依老師最後一筆審核通過的時間排序、越早越前面（名單由後端算好放在 appData.champions）。
    老師端與學生端共用同一條。 */
 function renderMarquee_(now = twNow_()) {
     const bar = document.getElementById("marqueeBar");
@@ -2724,9 +2728,13 @@ function renderKpiOverview() {
             <span class="shrink-0 text-[11px] font-extrabold px-1.5 py-0.5 rounded ${kpiToneClass_(k)}">${kpiText_(k)}</span>
         </button>`;
 
-    const byRateThenName = (a, b) => (b.k.rate - a.k.rate) || a.s.name.localeCompare(b.s.name, "zh-Hant");
+    // 完成率高的在前；完成率相同時，老師最後一筆審核通過越早越前面（沒有時間紀錄的排在有紀錄的後面）；再依姓名
+    const byRateThenApproval = (a, b) => (b.k.rate - a.k.rate)
+        || ((!a.k.lastApprovedAt) - (!b.k.lastApprovedAt))
+        || (a.k.lastApprovedAt < b.k.lastApprovedAt ? -1 : a.k.lastApprovedAt > b.k.lastApprovedAt ? 1 : 0)
+        || a.s.name.localeCompare(b.s.name, "zh-Hant");
     const fill = (el, titleId, titleIcon, titleText, period, emptyText) => {
-        const list = students.map(s => ({ s, k: getStudentKpi(s.id, period) })).filter(x => x.k.total > 0).sort(byRateThenName);
+        const list = students.map(s => ({ s, k: getStudentKpi(s.id, period) })).filter(x => x.k.total > 0).sort(byRateThenApproval);
         document.getElementById(titleId).innerHTML =
             `<i class="${titleIcon} mr-1.5"></i> ${titleText}（${getWeekLabel_(period === 'last' ? -1 : 0)}）<span class="ml-1 text-slate-400 font-medium">${list.length} 人</span>`;
         el.innerHTML = list.length
