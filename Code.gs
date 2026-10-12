@@ -30,7 +30,7 @@
  */
 
 // 後端版本：用瀏覽器開 /exec 網址可看到，確認部署的是新版
-const BACKEND_VERSION = "2026-10-13-v11-rank";
+const BACKEND_VERSION = "2026-10-13-v12-startdate";
 const SUBMIT_LOG_KEEP_DAYS = 15;    // 送審／審核紀錄保留天數（整份資料每次都要讀寫，紀錄太多會拖慢速度）
 const SUBMIT_LOG_MAX = 1000;        // 最多保留筆數，避免試算表過大
 const CONTACT_BOOK_KEEP_DAYS = 10; // 聯絡簿日期超過這麼多天就自動刪除
@@ -613,12 +613,21 @@ function lastWeekRange_(now) {
   return { start: ymdAdd_(thisMonday, -7), end: ymdAdd_(thisMonday, -1), today: today, dow: dow };
 }
 
+/* 台灣今天 yyyy-MM-dd；項目要「發布日期當天起」才算數 */
+function twToday_(now) {
+  return Utilities.formatDate(now || new Date(), "Asia/Taipei", "yyyy-MM-dd");
+}
+function isTaskStarted_(t, today) {
+  return !t.date || String(t.date) <= today;
+}
+
 function computeChampions_(data, now) {
   const range = lastWeekRange_(now || new Date());
+  const today = twToday_(now);
   const list = [];
   (data.students || []).forEach(function (st) {
     const tasks = (data.tasks || []).filter(function (t) {
-      return t.studentId === st.id && t.date >= range.start && t.date <= range.end;
+      return t.studentId === st.id && t.date >= range.start && t.date <= range.end && isTaskStarted_(t, today);
     });
     if (tasks.length === 0) return;
     if (!tasks.every(function (t) { return t.teacherStatus === "已完成"; })) return;
@@ -740,7 +749,7 @@ function studentView_(data, studentId, log) {
     subjects: data.subjects,
     grades: data.grades,
     students: [stripStudent_(me)],
-    tasks: withReviewedAt_(data.tasks.filter(function (t) { return t.studentId === studentId; }), log),
+    tasks: withReviewedAt_(data.tasks.filter(function (t) { return t.studentId === studentId && isTaskStarted_(t, twToday_(new Date())); }), log),
     contactBook: contactBookForStudent_(data.contactBook, me, new Date()),
     champions: computeChampions_(data, new Date())
   };

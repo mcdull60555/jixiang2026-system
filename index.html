@@ -2088,8 +2088,10 @@ function populateTeacherFilterDropdowns() {
 }
 
 /* 共用：學生是否 100% 完成所有已發派項目（師生兩端皇冠共用） */
+/* 共用：項目要從發布日期（t.date）當天起才算進 KPI、才顯示在學生清單 */
+function isTaskStarted_(t) { return !t.date || String(t.date) <= localDateStr_(); }
 function isStudentAllCompleted(studentId) {
-    const tasks = (window.appData.tasks || []).filter(t => t.studentId === studentId);
+    const tasks = (window.appData.tasks || []).filter(t => t.studentId === studentId && isTaskStarted_(t));
     return tasks.length > 0 && tasks.every(t => t.teacherStatus === "已完成");
 }
 
@@ -2188,7 +2190,7 @@ const KPI_CARE_THRESHOLD = 80;
 function getStudentKpi(studentId, period) {
     const offset = period === 'last' ? -1 : 0;
     const tasks = (window.appData.tasks || []).filter(t =>
-        t.studentId === studentId && (period === 'all' || isDateInWeek_(t.date, offset)));
+        t.studentId === studentId && isTaskStarted_(t) && (period === 'all' || isDateInWeek_(t.date, offset)));
     const total = tasks.length;
     const done = tasks.filter(t => t.teacherStatus === "已完成");
     const completed = done.length;
@@ -3608,7 +3610,7 @@ function renderStudentsCards() {
 
     container.innerHTML = students.map(s => {
         const isChecked = selectedStudentIds.has(s.id);
-        const stTasks = window.appData.tasks.filter(t => t.studentId === s.id);
+        const stTasks = window.appData.tasks.filter(t => t.studentId === s.id && isTaskStarted_(t));
         const completedCount = stTasks.filter(t => t.teacherStatus === "已完成").length;
         const kpiThis = getStudentKpi(s.id, 'this');
         const kpiLast = getStudentKpi(s.id, 'last');
@@ -4247,7 +4249,7 @@ function renderStudentDashboardContent() {
     const selectedSubject = document.getElementById("studentSubjectFilter")?.value || "all";
     const selectedStatus = document.getElementById("studentStatusFilter")?.value || "all";
 
-    const allStudentTasks = window.appData.tasks.filter(t => t.studentId === student.id);
+    const allStudentTasks = window.appData.tasks.filter(t => t.studentId === student.id && isTaskStarted_(t));
 
     // 計算完成率
     const hwTasks = allStudentTasks.filter(t => t.type === "作業");
