@@ -370,7 +370,7 @@
                             <h3 class="font-bold text-slate-800 text-base flex items-center">
                                 <i class="fa-solid fa-list-check text-indigo-600 mr-2"></i> 各科派發項目維護中心
                             </h3>
-                            <p class="text-xs text-slate-500">100% 完成率項目會自動移至歸檔區；項目超過 120 天生命週期將自動清空，支援同步連動刪除</p>
+                            <p class="text-xs text-slate-500">100% 完成率項目會自動移至歸檔區；歸檔項目超過 15 天生命週期將自動清空，支援同步連動刪除</p>
                         </div>
 
                         <div class="grid grid-cols-[auto_1fr] sm:flex sm:flex-wrap items-center gap-2 text-xs w-full md:w-auto">
@@ -1967,22 +1967,32 @@ function renderRoleView() {
     }
 }
 
-/* ==================== 120天生命週期自動清空機制 ==================== */
+/* ==================== 歸檔項目 15 天生命週期自動清空機制 ==================== */
+// 只清「已歸檔」的項目：依「類型_科目_標題_派發日」分組（和各科派發項目維護中心的分組一樣），
+// 整組都 100% 完成才算歸檔；歸檔且派發日超過 15 天就清掉。還沒完成的項目不管多久都保留。
+// 老師端清掉後，下次儲存（或重新整理）會同步刪除雲端資料；學生端只是不再顯示自己已完成的舊項目。
+const ARCHIVE_LIFECYCLE_DAYS = 15;
 function checkAndCleanLifeCycleTasks() {
     if (!window.appData || !window.appData.tasks) return;
-    const now = twNow_();
-    const activeTasks = [];
-    
+    // 以「天」為單位、用台灣日期相減（不受瀏覽器時區影響）：派發日滿 15 天的當天還保留，隔天才清
+    const dayNum = ds => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(ds || "")); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) / 86400000 : NaN; };
+    const today = dayNum(localDateStr_());
+    const keyOf = t => `${t.type}_${t.subject}_${t.title}_${t.date}`;
+
+    const groups = {};
     window.appData.tasks.forEach(t => {
-        const taskDate = new Date(t.date);
-        const diffTime = now - taskDate;
-        const diffDays = diffTime / (1000 * 60 * 60 * 24);
-        
-        if (diffDays <= 120) {
-            activeTasks.push(t);
-        }
+        const g = groups[keyOf(t)] || (groups[keyOf(t)] = { total: 0, done: 0 });
+        g.total++;
+        if (t.teacherStatus === "已完成") g.done++;
     });
-    window.appData.tasks = activeTasks;
+
+    window.appData.tasks = window.appData.tasks.filter(t => {
+        const g = groups[keyOf(t)];
+        const archived = g.total > 0 && g.done === g.total;
+        if (!archived) return true;
+        const diffDays = today - dayNum(t.date);
+        return !(diffDays > ARCHIVE_LIFECYCLE_DAYS); // 日期無法判讀（NaN）時保留，不誤刪
+    });
 }
 
 /* ==================== 老師端核心邏輯 ==================== */
