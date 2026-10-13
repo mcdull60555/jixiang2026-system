@@ -2838,7 +2838,8 @@ function renderSubjectCompletionRates() {
     const targetStudentId = document.getElementById("completionRateStudentSelect")?.value || "all";
     const subjects = window.appData.subjects || [];
 
-    let relevantTasks = window.appData.tasks;
+    // 預約派發（還沒到發布日期）的項目不列入完成率
+    let relevantTasks = window.appData.tasks.filter(isTaskStarted_);
     if (targetStudentId !== "all") {
         relevantTasks = relevantTasks.filter(t => t.studentId === targetStudentId);
     }
