@@ -1832,7 +1832,7 @@ async function verifyTeacherLogin() {
 function openStudentLoginModal() {
     const select = document.getElementById("loginStudentSelect");
     select.innerHTML = sortStudentsByGradeSchool_(window.appData.students)
-        .map(s => `<option value="${s.id}">${escHtml_(studentOptionLabel_(s))}</option>`).join('');
+        .map(s => `<option value="${s.id}">${escHtml_([s.school, maskName_(s.name), s.grade].filter(Boolean).join(" "))}</option>`).join('');
     document.getElementById("studentLoginPwdInput").value = "";
     document.getElementById("studentLoginError").classList.add("hidden");
     openModal("studentLoginModal");
@@ -2236,7 +2236,7 @@ function renderMarquee_(now = twNow_()) {
     if (showChampions) {
         const medals = ["🥇", "🥈", "🥉"];
         const names = list.map((c, i) =>
-            `${medals[i] || "🌟"} ${escHtml_(c.name)}`).join("　");
+            `${medals[i] || "🌟"} ${escHtml_(maskName_(c.name))}`).join("　");
         const range = champions.weekStart && champions.weekEnd ? `（${champions.weekStart.slice(5).replace("-", "/")}～${champions.weekEnd.slice(5).replace("-", "/")}）` : "";
         html = `🎉 恭喜以下同學上週${range}完成所有進度！　${names}　太棒了，繼續保持！🎉`;
     } else {
@@ -3536,6 +3536,12 @@ const DEFAULT_STUDENT_PWD = "0000"; // 新增學生的預設密碼
 
 /* 學生管理排序：年級（依「科目與年級設定」裡的順序，一年級在前）→ 學校 → 班級 → 姓名，全部遞增 */
 // 下拉選單用：學校 學生姓名 年級
+/* 對外顯示（學生登入選單、跑馬燈）用：姓名第二個字改成 O，例如 王小明 → 王O明 */
+function maskName_(name) {
+    const a = Array.from(String(name || ""));
+    if (a.length >= 2) a[1] = "O";
+    return a.join("");
+}
 function studentOptionLabel_(s) {
     return [s.school, s.name, s.grade].filter(Boolean).join(" ");
 }
