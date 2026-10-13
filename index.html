@@ -764,7 +764,10 @@
                 </div>
 
                 <div id="singleEditMultiStudentContainer" class="hidden bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
-                    <p class="font-bold text-slate-600 mb-1">勾選要派發的學生：</p>
+                    <div class="flex items-center justify-between mb-1">
+                        <p class="font-bold text-slate-600">勾選要派發的學生：</p>
+                        <label class="flex items-center space-x-1 font-bold text-indigo-600 cursor-pointer"><input type="checkbox" id="singleEditSelectAll" onchange="toggleAllStudentCbs_('single-edit-st-cb', this.checked)" class="rounded text-indigo-600"><span>全選</span></label>
+                    </div>
                     <div id="singleEditStudentCheckboxes" class="grid grid-cols-2 gap-2"></div>
                 </div>
 
@@ -1094,7 +1097,10 @@
                 </div>
 
                 <div id="multiStudentContainer" class="hidden bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
-                    <p class="text-xs font-bold text-slate-500 mb-1">勾選要派發的學生：</p>
+                    <div class="flex items-center justify-between mb-1">
+                        <p class="text-xs font-bold text-slate-500">勾選要派發的學生：</p>
+                        <label class="flex items-center space-x-1 text-xs font-bold text-indigo-600 cursor-pointer"><input type="checkbox" id="taskSelectAll" onchange="toggleAllStudentCbs_('task-st-cb', this.checked)" class="rounded text-indigo-600"><span>全選</span></label>
+                    </div>
                     <div id="multiStudentCheckboxes" class="grid grid-cols-2 gap-2 text-xs"></div>
                 </div>
 
@@ -3341,15 +3347,26 @@ function openSingleEditDispatchModal(idsStr) {
     openModal("singleEditDispatchModal");
 }
 
+/* 「全選」勾選框：一次勾選／取消全部學生；個別取消後全選會自動取消勾選 */
+function toggleAllStudentCbs_(cls, checked) {
+    document.querySelectorAll('.' + cls).forEach(cb => { cb.checked = checked; });
+}
+function syncSelectAll_(cls, allId) {
+    const cbs = [...document.querySelectorAll('.' + cls)];
+    const all = document.getElementById(allId);
+    if (all) all.checked = cbs.length > 0 && cbs.every(cb => cb.checked);
+}
+
 function renderSingleEditStudentCheckboxes(selectedIds = []) {
     const container = document.getElementById("singleEditStudentCheckboxes");
     if (!container) return;
     container.innerHTML = window.appData.students.map(s => `
         <label class="flex items-center space-x-1.5 font-bold text-slate-700 cursor-pointer">
-            <input type="checkbox" value="${escHtml_(s.id)}" ${selectedIds.includes(s.id) ? 'checked' : ''} class="single-edit-st-cb rounded text-indigo-600">
+            <input type="checkbox" value="${escHtml_(s.id)}" ${selectedIds.includes(s.id) ? 'checked' : ''} onchange="syncSelectAll_('single-edit-st-cb', 'singleEditSelectAll')" class="single-edit-st-cb rounded text-indigo-600">
             <span>${s.school ? `<span class="text-slate-400 font-medium">${escHtml_(s.school)}</span> ` : ''}${escHtml_(s.name)} (${escHtml_(s.grade)})</span>
         </label>
     `).join('');
+    syncSelectAll_('single-edit-st-cb', 'singleEditSelectAll');
 }
 
 function toggleSingleEditTargetMode() {
@@ -4025,10 +4042,11 @@ function renderAssignTaskStudentCheckboxes() {
     if (!container) return;
     container.innerHTML = window.appData.students.map(s => `
         <label class="flex items-center space-x-1.5 font-bold text-slate-700 cursor-pointer">
-            <input type="checkbox" value="${s.id}" class="task-st-cb rounded text-indigo-600">
+            <input type="checkbox" value="${s.id}" onchange="syncSelectAll_('task-st-cb', 'taskSelectAll')" class="task-st-cb rounded text-indigo-600">
             <span>${s.school ? `<span class="text-slate-400 font-medium">${escHtml_(s.school)}</span> ` : ''}${escHtml_(s.name)} (${escHtml_(s.grade)})</span>
         </label>
     `).join('');
+    syncSelectAll_('task-st-cb', 'taskSelectAll');
 }
 
 function toggleMultiSelectMode() {
