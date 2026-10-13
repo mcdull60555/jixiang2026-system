@@ -2032,8 +2032,10 @@ function switchTeacherTab(tabName) {
 function renderTeacherDashboard() {
     checkAndCleanLifeCycleTasks();
     const totalStudents = window.appData.students.length;
-    const totalHw = window.appData.tasks.filter(t => t.type === '作業').length;
-    const totalExam = window.appData.tasks.filter(t => t.type === '考卷').length;
+    // 預約派發（還沒到發布日期）的項目先不計入
+    const startedTasks = window.appData.tasks.filter(isTaskStarted_);
+    const totalHw = startedTasks.filter(t => t.type === '作業').length;
+    const totalExam = startedTasks.filter(t => t.type === '考卷').length;
 
     document.getElementById("kpiStudentCount").innerText = `${totalStudents} 人`;
     document.getElementById("kpiHomeworkCount").innerText = `${totalHw} 項`;
