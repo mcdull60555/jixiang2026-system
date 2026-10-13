@@ -2282,6 +2282,10 @@ window.addEventListener("resize", () => {
 });
 
 /* 這個期間有項目、而且全部都老師審核完成 → 皇冠 */
+/* 該週有項目、但老師審核完成率低於 80% → 太陽（跟皇冠同樣的顯示方式） */
+function isKpiLow_(k) {
+    return k.total > 0 && k.rate < KPI_CARE_THRESHOLD;
+}
 function isKpiFull_(k) {
     return k.total > 0 && k.completed === k.total;
 }
@@ -3678,12 +3682,12 @@ function renderStudentsCards() {
 
                 <div class="grid grid-cols-3 gap-1.5 text-center">
                     <div class="relative rounded-lg px-1 py-1.5 ${kpiToneClass_(kpiThis)}">
-                        ${isKpiFull_(kpiThis) ? '<span class="absolute -top-2 -right-1 text-sm drop-shadow" title="本週的項目全部完成！">👑</span>' : ''}
+                        ${isKpiFull_(kpiThis) ? '<span class="absolute -top-2 -right-1 text-sm drop-shadow" title="本週的項目全部完成！">👑</span>' : ''}${isKpiLow_(kpiThis) ? `<span class="absolute -top-2 -right-1 text-sm drop-shadow" title="本週審核完成率 ${kpiThis.rate}%，未達 ${KPI_CARE_THRESHOLD}%">🌞</span>` : ''}
                         <div class="text-[10px] font-bold opacity-80">本週</div>
                         <div class="text-[11px] font-extrabold">${kpiText_(kpiThis)}</div>
                     </div>
                     <div class="relative rounded-lg px-1 py-1.5 ${kpiToneClass_(kpiLast)}">
-                        ${isKpiFull_(kpiLast) ? '<span class="absolute -top-2 -right-1 text-sm drop-shadow" title="上週的項目全部完成！">👑</span>' : ''}
+                        ${isKpiFull_(kpiLast) ? '<span class="absolute -top-2 -right-1 text-sm drop-shadow" title="上週的項目全部完成！">👑</span>' : ''}${isKpiLow_(kpiLast) ? `<span class="absolute -top-2 -right-1 text-sm drop-shadow" title="上週審核完成率 ${kpiLast.rate}%，未達 ${KPI_CARE_THRESHOLD}%">🌞</span>` : ''}
                         <div class="text-[10px] font-bold opacity-80">上週</div>
                         <div class="text-[11px] font-extrabold">${kpiText_(kpiLast)}</div>
                     </div>
@@ -4257,6 +4261,7 @@ function renderStudentKpiCards_(studentId) {
         const bar = k.total === 0 ? "bg-slate-200" : (k.rate >= KPI_CARE_THRESHOLD ? "bg-emerald-500" : "bg-amber-500");
         el.innerHTML = `
             ${full ? `<span class="absolute -top-3 right-3 text-2xl drop-shadow animate-bounce" title="${title}的項目全部完成！">👑</span>` : ""}
+            ${isKpiLow_(k) ? `<span class="absolute -top-3 right-3 text-2xl drop-shadow" title="${title}審核完成率 ${k.rate}%，未達 ${KPI_CARE_THRESHOLD}%">🌞</span>` : ""}
             <div class="flex items-center justify-between gap-2">
                 <span class="text-xs font-bold text-slate-600"><i class="fa-solid fa-calendar-week text-indigo-500 mr-1"></i>${title}</span>
                 <span class="text-[10px] text-slate-400">${getWeekLabel_(offset)}</span>
@@ -4303,8 +4308,16 @@ function renderStudentDashboardContent() {
     renderStudentKpiCards_(student.id);
 
     // 警告標章與皇冠獎章邏輯
-    const isWarning = (hwTasks.length > 0 && hwRate < 80) || (examTasks.length > 0 && examRate < 80);
+    // 進度完成率警告：上週或本週的老師審核完成率未達 80% 就跳出來，並告知是哪一週
+    const kThis = getStudentKpi(student.id, 'this');
+    const kLast = getStudentKpi(student.id, 'last');
+    const lowWeeks = [];
+    if (isKpiLow_(kLast)) lowWeeks.push(`上週（${getWeekLabel_(-1)}）審核完成率只有 ${kLast.rate}%`);
+    if (isKpiLow_(kThis)) lowWeeks.push(`本週（${getWeekLabel_(0)}）審核完成率只有 ${kThis.rate}%`);
+    const isWarning = lowWeeks.length > 0;
     document.getElementById("studentWarningBanner").classList.toggle("hidden", !isWarning);
+    const warnText = document.getElementById("studentWarningText");
+    if (warnText && isWarning) warnText.innerText = `${lowWeeks.join("；")}，未達 ${KPI_CARE_THRESHOLD}%。請儘速完成作業並請老師審核喔！`;
 
     const isAllCompleted = isStudentAllCompleted(student.id);
     document.getElementById("crownBadge").classList.toggle("hidden", !isAllCompleted);
