@@ -228,7 +228,7 @@
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                     <div class="bg-slate-50/70 border border-slate-200/80 rounded-xl p-3 space-y-2">
                         <h4 id="kpiLastWeekTitle" class="text-xs font-bold text-slate-700 flex items-center">
                             <i class="fa-solid fa-calendar-minus text-slate-500 mr-1.5"></i> 上週 KPI
@@ -246,6 +246,12 @@
                             <i class="fa-solid fa-heart-pulse text-rose-500 mr-1.5"></i> 需要關懷（低於 80%）
                         </h4>
                         <div id="kpiCareList" class="space-y-1.5 max-h-64 overflow-y-auto custom-scrollbar"></div>
+                    </div>
+                    <div class="bg-amber-50/60 border border-amber-200/80 rounded-xl p-3 space-y-2">
+                        <h4 id="kpiNotFullTitle" class="text-xs font-bold text-amber-800 flex items-center">
+                            <i class="fa-solid fa-list-check text-amber-500 mr-1.5"></i> 全部項目未達 100%
+                        </h4>
+                        <div id="kpiNotFullList" class="space-y-1.5 max-h-64 overflow-y-auto custom-scrollbar"></div>
                     </div>
                 </div>
             </div>
@@ -2791,6 +2797,20 @@ function renderKpiOverview() {
     };
     fill(lastEl, "kpiLastWeekTitle", "fa-solid fa-calendar-minus text-slate-500", "上週 KPI", "last", "上週沒有派發項目");
     fill(thisEl, "kpiThisWeekTitle", "fa-solid fa-calendar-week text-indigo-500", "本週 KPI", "this", "本週還沒有派發項目");
+
+    // 全部項目 KPI 未達 100%：還有項目沒做完（含已送出待審核、待訂正）的學生，完成率低的排前面
+    const notFullEl = document.getElementById("kpiNotFullList");
+    if (notFullEl) {
+        const notFull = students
+            .map(s => ({ s, k: getStudentKpi(s.id, 'all') }))
+            .filter(x => x.k.total > 0 && x.k.rate < 100)
+            .sort((a, b) => (a.k.rate - b.k.rate) || a.s.name.localeCompare(b.s.name, "zh-Hant"));
+        document.getElementById("kpiNotFullTitle").innerHTML =
+            `<i class="fa-solid fa-list-check text-amber-500 mr-1.5"></i> 全部項目未達 100%<span class="ml-1 text-amber-500 font-medium">${notFull.length} 人</span>`;
+        notFullEl.innerHTML = notFull.length
+            ? notFull.map(x => row(x.s, x.k, false, 'all')).join("")
+            : '<div class="text-center text-emerald-600 text-xs font-bold py-4">所有學生的全部項目都已完成 🎉</div>';
+    }
 
     const careList = students
         .map(s => ({ s, k: getStudentKpi(s.id, basis) }))
