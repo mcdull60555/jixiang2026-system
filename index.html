@@ -2885,7 +2885,8 @@ function renderTeacherTasksTable() {
     const statusFilter = document.getElementById("filterStatus")?.value || "all";
     const timeFilter = readTimeFilter_("task");
 
-    let tasks = [...window.appData.tasks];
+    // 全班進度管控與審核：未到發布日期的預約項目先不列入，當天才出現（派發項目管理仍看得到）
+    let tasks = window.appData.tasks.filter(isTaskStarted_);
 
     // 清掉已不存在的選取（例如被即時同步刪除的項目）
     const allIds = new Set(tasks.map(t => String(t.id)));
@@ -3231,6 +3232,7 @@ function renderDispatchManagement() {
                                     ${escHtml_(g.subject)}
                                 </span>
                                 <h4 class="font-bold text-slate-800 text-xs sm:text-sm">${escHtml_(g.title)}</h4>
+                                ${String(g.date) > localDateStr_() ? '<span class="bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded text-[10px] font-extrabold"><i class="fa-solid fa-clock mr-1"></i>預約派發</span>' : ''}
                                 ${isArchived ? '<span class="bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded text-[10px] font-extrabold"><i class="fa-solid fa-box-archive mr-1"></i>100%已歸檔</span>' : ''}
                             </div>
                             <p class="text-[11px] text-slate-400 mt-0.5">發布日期：${g.date} | 完成進度：${g.completedCount}/${assignedCount}</p>
