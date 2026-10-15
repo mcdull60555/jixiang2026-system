@@ -2250,7 +2250,7 @@ function renderMarquee_(now = twNow_()) {
     if (showChampions) {
         const medals = ["🥇", "🥈", "🥉"];
         const names = list.map((c, i) =>
-            `${medals[i] || "🌟"} ${escHtml_(maskName_(c.name))}`).join("　");
+            `${medals[i] || "🌟"} ${escHtml_(maskName_(c.name))}${c.grade ? `（${escHtml_(c.grade)}）` : ""}`).join("　");
         const range = champions.weekStart && champions.weekEnd ? `（${champions.weekStart.slice(5).replace("-", "/")}～${champions.weekEnd.slice(5).replace("-", "/")}）` : "";
         html = `🎉 恭喜以下同學上週${range}完成所有進度！　${names}　太棒了，繼續保持！🎉`;
     } else {
