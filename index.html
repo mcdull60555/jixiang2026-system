@@ -2952,17 +2952,28 @@ function renderTeacherTasksTable() {
         return true;
     });
 
-    // 排序：待審核 → 未完成/待訂正 → 已完成；同組內依發布日期新到舊，再依年級由小到大，最後依學校
+    // 排序：待審核 → 未完成/待訂正 → 已完成；
+    // 待審核這組先送出的排最前面（讓老師先審送最久的，沒有送出時間的舊資料排在有時間的後面）；
+    // 其餘同組內依發布日期新到舊，再依年級由小到大、學校，最後依姓名
     const reviewTier = t => t.pendingReview ? 0 : (t.teacherStatus === "已完成" ? 2 : 1);
     const gradeList = window.appData.grades || [];
     const studentOf = t => window.appData.students.find(s => s.id === t.studentId) || {};
     const gradeRank = t => { const i = gradeList.indexOf(studentOf(t).grade); return i < 0 ? 9999 : i; };
     const zh = (x, y) => String(x || "").localeCompare(String(y || ""), "zh-Hant", { numeric: true });
+    const submittedKey = t => String(t.submittedAt || "");
+    const bySubmitted = (a, b) => {
+        if (reviewTier(a) !== 0) return 0; // 只有「待審核」這組才看送出時間
+        const x = submittedKey(a), y = submittedKey(b);
+        if (!x !== !y) return x ? -1 : 1;
+        return x < y ? -1 : x > y ? 1 : 0;
+    };
     tasks.sort((a, b) =>
         (reviewTier(a) - reviewTier(b)) ||
+        bySubmitted(a, b) ||
         String(b.date || "").localeCompare(String(a.date || "")) ||
         (gradeRank(a) - gradeRank(b)) ||
-        zh(studentOf(a).school, studentOf(b).school));
+        zh(studentOf(a).school, studentOf(b).school) ||
+        zh(studentOf(a).name, studentOf(b).name));
 
     visibleReviewIds = tasks.map(t => String(t.id));
 
