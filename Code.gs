@@ -30,8 +30,8 @@
  */
 
 // 後端版本：用瀏覽器開 /exec 網址可看到，確認部署的是新版
-const BACKEND_VERSION = "2026-10-15-v13-start5am";
-const SUBMIT_LOG_KEEP_DAYS = 15;    // 送審／審核紀錄保留天數（整份資料每次都要讀寫，紀錄太多會拖慢速度）
+const BACKEND_VERSION = "2026-10-15-v14-keep7";
+const SUBMIT_LOG_KEEP_DAYS = 7;     // 送審／審核紀錄保留天數（整份資料每次都要讀寫，紀錄太多會拖慢速度）
 const SUBMIT_LOG_MAX = 1000;        // 最多保留筆數，避免試算表過大
 const CONTACT_BOOK_KEEP_DAYS = 10; // 聯絡簿日期超過這麼多天就自動刪除
 const APP_TZ = "Asia/Taipei"; // 週的計算（週一～週日）固定用台灣時間
