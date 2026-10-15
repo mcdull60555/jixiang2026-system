@@ -2103,7 +2103,10 @@ function populateTeacherFilterDropdowns() {
 
 /* 共用：學生是否 100% 完成所有已發派項目（師生兩端皇冠共用） */
 /* 共用：項目要從發布日期（t.date）當天起才算進 KPI、才顯示在學生清單 */
-function isTaskStarted_(t) { return !t.date || String(t.date) <= localDateStr_(); }
+/* 預約派發的項目在發布日期當天凌晨 05:00 才生效（台灣時間往前推 5 小時當作「生效日」；需與 Code.gs TASK_START_HOUR 一致） */
+const TASK_START_HOUR = 5;
+function taskActiveDateStr_() { return localDateStr_(new Date(twNow_().getTime() - TASK_START_HOUR * 3600 * 1000)); }
+function isTaskStarted_(t) { return !t.date || String(t.date) <= taskActiveDateStr_(); }
 function isStudentAllCompleted(studentId) {
     const tasks = (window.appData.tasks || []).filter(t => t.studentId === studentId && isTaskStarted_(t));
     return tasks.length > 0 && tasks.every(t => t.teacherStatus === "已完成");
@@ -3265,7 +3268,7 @@ function renderDispatchManagement() {
                                     ${escHtml_(g.subject)}
                                 </span>
                                 <h4 class="font-bold text-slate-800 text-xs sm:text-sm">${escHtml_(g.title)}</h4>
-                                ${String(g.date) > localDateStr_() ? '<span class="bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded text-[10px] font-extrabold"><i class="fa-solid fa-clock mr-1"></i>預約派發</span>' : ''}
+                                ${String(g.date) > taskActiveDateStr_() ? '<span class="bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded text-[10px] font-extrabold"><i class="fa-solid fa-clock mr-1"></i>預約派發</span>' : ''}
                                 ${isArchived ? '<span class="bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded text-[10px] font-extrabold"><i class="fa-solid fa-box-archive mr-1"></i>100%已歸檔</span>' : ''}
                             </div>
                             <p class="text-[11px] text-slate-400 mt-0.5">發布日期：${g.date} | 完成進度：${g.completedCount}/${assignedCount}</p>
