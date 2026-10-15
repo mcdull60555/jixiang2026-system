@@ -228,32 +228,32 @@
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)] gap-4">
+                <div class="overflow-x-auto"><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[max-content_max-content_minmax(max-content,1fr)_minmax(max-content,1fr)] gap-4">
                     <div class="bg-slate-50/70 border border-slate-200/80 rounded-xl p-3 space-y-2">
-                        <h4 id="kpiLastWeekTitle" class="text-xs font-bold text-slate-700 flex items-center">
+                        <h4 id="kpiLastWeekTitle" class="text-xs font-bold text-slate-700 flex items-center whitespace-nowrap">
                             <i class="fa-solid fa-calendar-minus text-slate-500 mr-1.5"></i> 上週 KPI
                         </h4>
-                        <div id="kpiLastWeekList" class="space-y-1.5 max-h-64 overflow-y-auto custom-scrollbar"></div>
+                        <div id="kpiLastWeekList" class="space-y-1.5 max-h-64 overflow-y-auto custom-scrollbar pr-2"></div>
                     </div>
                     <div class="bg-slate-50/70 border border-slate-200/80 rounded-xl p-3 space-y-2">
-                        <h4 id="kpiThisWeekTitle" class="text-xs font-bold text-slate-700 flex items-center">
+                        <h4 id="kpiThisWeekTitle" class="text-xs font-bold text-slate-700 flex items-center whitespace-nowrap">
                             <i class="fa-solid fa-calendar-week text-indigo-500 mr-1.5"></i> 本週 KPI
                         </h4>
-                        <div id="kpiThisWeekList" class="space-y-1.5 max-h-64 overflow-y-auto custom-scrollbar"></div>
+                        <div id="kpiThisWeekList" class="space-y-1.5 max-h-64 overflow-y-auto custom-scrollbar pr-2"></div>
                     </div>
                     <div class="bg-rose-50/60 border border-rose-200/80 rounded-xl p-3 space-y-2">
-                        <h4 id="kpiCareTitle" class="text-xs font-bold text-rose-800 flex items-center">
+                        <h4 id="kpiCareTitle" class="text-xs font-bold text-rose-800 flex items-center whitespace-nowrap">
                             <i class="fa-solid fa-heart-pulse text-rose-500 mr-1.5"></i> 需要關懷（低於 80%）
                         </h4>
-                        <div id="kpiCareList" class="space-y-1.5 max-h-64 overflow-y-auto custom-scrollbar"></div>
+                        <div id="kpiCareList" class="space-y-1.5 max-h-64 overflow-y-auto custom-scrollbar pr-2"></div>
                     </div>
                     <div class="bg-amber-50/60 border border-amber-200/80 rounded-xl p-3 space-y-2">
-                        <h4 id="kpiNotFullTitle" class="text-xs font-bold text-amber-800 flex items-center">
+                        <h4 id="kpiNotFullTitle" class="text-xs font-bold text-amber-800 flex items-center whitespace-nowrap">
                             <i class="fa-solid fa-list-check text-amber-500 mr-1.5"></i> 全部項目未達 100%
                         </h4>
-                        <div id="kpiNotFullList" class="space-y-1.5 max-h-64 overflow-y-auto custom-scrollbar"></div>
+                        <div id="kpiNotFullList" class="space-y-1.5 max-h-64 overflow-y-auto custom-scrollbar pr-2"></div>
                     </div>
-                </div>
+                </div></div>
             </div>
 
             <!-- 控制頁籤與操作按鈕 -->
@@ -2776,7 +2776,7 @@ function renderKpiOverview() {
     const row = (s, k, showTime, period) => `
         <button type="button" onclick="openStudentPendingModal('${escHtml_(s.id)}', '${period}')"
             class="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-left hover:border-indigo-300 hover:bg-indigo-50/50 transition">
-            <span class="min-w-0 break-words text-xs font-bold text-slate-700">
+            <span class="whitespace-nowrap text-xs font-bold text-slate-700">
                 ${s.school ? `<span class="text-slate-400 font-medium">${escHtml_(s.school)}</span> ` : ''}${escHtml_(s.name)}${isKpiFull_(k) ? ' 👑' : ''}
             </span>
             <span class="shrink-0 flex items-center gap-1.5">
