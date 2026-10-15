@@ -33,7 +33,7 @@
 const BACKEND_VERSION = "2026-10-15-v14-keep7";
 const SUBMIT_LOG_KEEP_DAYS = 7;     // 送審／審核紀錄保留天數（整份資料每次都要讀寫，紀錄太多會拖慢速度）
 const SUBMIT_LOG_MAX = 1000;        // 最多保留筆數，避免試算表過大
-const CONTACT_BOOK_KEEP_DAYS = 10; // 聯絡簿日期超過這麼多天就自動刪除
+const CONTACT_BOOK_KEEP_DAYS = 7;  // 聯絡簿日期超過這麼多天就自動刪除
 const APP_TZ = "Asia/Taipei"; // 週的計算（週一～週日）固定用台灣時間
 const DATA_SHEET_NAME = "__APP_DATA__";
 const CHUNK_SIZE = 45000;
@@ -652,7 +652,7 @@ function computeChampions_(data, now) {
 }
 
 /* ==================================================================
- * 聯絡簿自動清除：日期早於「今天 − 10 天」的整筆刪除（台灣時間）
+ * 聯絡簿自動清除：日期早於「今天 − 7 天」的整筆刪除（台灣時間）
  * ================================================================== */
 function contactBookCutoff_(now) {
   return ymdAdd_(Utilities.formatDate(now, APP_TZ, "yyyy-MM-dd"), -CONTACT_BOOK_KEEP_DAYS);

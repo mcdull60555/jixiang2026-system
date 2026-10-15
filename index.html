@@ -511,7 +511,7 @@
                         <h3 class="font-bold text-slate-800 text-sm sm:text-base flex items-center">
                             <i class="fa-solid fa-book-open-reader text-indigo-600 mr-2"></i> 電子聯絡簿
                         </h3>
-                        <p class="text-[11px] sm:text-xs text-slate-500">今天與之後的事項顯示在上方；日期已過的會收進下方「過期聯絡簿」，點開可查看過去 10 天（超過 10 天會自動刪除）。學生與家長登入後可以看到。</p>
+                        <p class="text-[11px] sm:text-xs text-slate-500">今天與之後的事項顯示在上方；日期已過的會收進下方「過期聯絡簿」，點開可查看過去 7 天（超過 7 天會自動刪除）。學生與家長登入後可以看到。</p>
                     </div>
                     <button onclick="openContactBookModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm px-3.5 py-2 rounded-lg font-bold shadow-sm transition flex items-center shrink-0">
                         <i class="fa-solid fa-plus mr-1"></i> 新增聯絡簿
@@ -522,7 +522,7 @@
 
                 <div class="border border-slate-200 rounded-xl overflow-hidden">
                     <button type="button" onclick="toggleContactBookExpired('tcb')" class="w-full flex items-center justify-between px-3 py-2.5 bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-600 transition">
-                        <span><i class="fa-solid fa-clock-rotate-left mr-1.5"></i> 過期聯絡簿（過去 10 天，超過自動刪除）<span id="tcbExpiredCount" class="ml-1.5 whitespace-nowrap bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full text-[10px]">0 筆</span></span>
+                        <span><i class="fa-solid fa-clock-rotate-left mr-1.5"></i> 過期聯絡簿（過去 7 天，超過自動刪除）<span id="tcbExpiredCount" class="ml-1.5 whitespace-nowrap bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full text-[10px]">0 筆</span></span>
                         <i id="tcbExpiredChevron" class="fa-solid fa-chevron-down transition-transform"></i>
                     </button>
                     <div id="tcbExpiredWrap" class="hidden p-3 space-y-2 border-t border-slate-200">
@@ -678,7 +678,7 @@
 
                 <div class="border border-slate-200 rounded-xl overflow-hidden">
                     <button type="button" onclick="toggleContactBookExpired('scb')" class="w-full flex items-center justify-between px-3 py-2.5 bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-600 transition">
-                        <span><i class="fa-solid fa-clock-rotate-left mr-1.5"></i> 過期聯絡簿（過去 10 天，超過自動刪除）<span id="scbExpiredCount" class="ml-1.5 whitespace-nowrap bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full text-[10px]">0 筆</span></span>
+                        <span><i class="fa-solid fa-clock-rotate-left mr-1.5"></i> 過期聯絡簿（過去 7 天，超過自動刪除）<span id="scbExpiredCount" class="ml-1.5 whitespace-nowrap bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full text-[10px]">0 筆</span></span>
                         <i id="scbExpiredChevron" class="fa-solid fa-chevron-down transition-transform"></i>
                     </button>
                     <div id="scbExpiredWrap" class="hidden p-3 space-y-2 border-t border-slate-200">
@@ -2355,7 +2355,7 @@ function kpiText_(k) {
 
 /* ==================== 電子聯絡簿 ==================== */
 const WEEKDAY_NAMES_ = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
-const CONTACT_BOOK_EXPIRED_DAYS = 10; // 過期區顯示天數；超過這天數後端會自動刪除（需與 Code.gs CONTACT_BOOK_KEEP_DAYS 一致）
+const CONTACT_BOOK_EXPIRED_DAYS = 7; // 過期區顯示天數；超過這天數後端會自動刪除（需與 Code.gs CONTACT_BOOK_KEEP_DAYS 一致）
 const contactBookExpiredOpen_ = { tcb: false, scb: false }; // 老師端／學生端「過期聯絡簿」是否展開
 
 // ISO 時間 → 台灣時間「2026/10/10 14:32」；short=true 時省略年份「10/10 14:32」
@@ -2389,7 +2389,7 @@ function addDaysStr_(dateStr, n) {
     return localDateStr_(d);
 }
 
-// 今天與之後＝進行中；今天之前、且在過去 10 天內＝過期（收在可展開區）；更早的另外計數
+// 今天與之後＝進行中；今天之前、且在過去 7 天內＝過期（收在可展開區）；更早的另外計數
 function getContactBookGroups_(editable) {
     const today = localDateStr_();
     const from = addDaysStr_(today, -CONTACT_BOOK_EXPIRED_DAYS);
