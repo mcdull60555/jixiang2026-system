@@ -21,6 +21,7 @@
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config = { theme: { extend: { colors: { indigo: {50:"#EEF6FD",100:"#D9EBFB",200:"#B5D7F6",300:"#84BCEF",400:"#4C9DE6",500:"#2687DD",600:"#1577D2",700:"#0A60C4",800:"#0B4F9C",900:"#0D427F",950:"#0A2A52"} } } } };</script>
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Canvas Confetti -->
@@ -618,7 +619,7 @@
                     <div class="w-px bg-[#0A60C4]/40 my-1"></div>
                     <div class="flex-1 flex flex-col items-center gap-1.5 py-1"><i class="fa-solid fa-chart-column text-2xl sm:text-3xl"></i><span class="text-xs sm:text-sm font-bold">學習成長</span></div>
                 </div>
-                <button onclick="openStudentLoginModal()" class="bg-[#1577D2] hover:bg-[#0A60C4] text-white font-bold px-6 py-3 rounded-xl text-sm transition shadow-md w-full">
+                <button onclick="openStudentLoginModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-3 rounded-xl text-sm transition shadow-md w-full">
                     選擇學生並登入
                 </button>
                 <h2 class="text-lg sm:text-xl font-bold text-slate-800">請先選擇學生並驗證登入</h2>
