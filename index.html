@@ -2965,7 +2965,7 @@ function renderTeacherTasksTable() {
 
     // 排序：待審核 → 未完成/待訂正 → 已完成；
     // 待審核這組先送出的排最前面（讓老師先審送最久的，沒有送出時間的舊資料排在有時間的後面）；
-    // 其餘依 發布日期（新到舊）→ 項目名稱／範圍（數字依大小）→ 年級（小到大）→ 學生姓名（最後才看學校）
+    // 其餘依 發布日期（新到舊）→ 項目名稱／範圍（數字依大小）→ 年級（小到大）→ 學校 → 學生姓名
     const reviewTier = t => t.pendingReview ? 0 : (t.teacherStatus === "已完成" ? 2 : 1);
     const gradeList = window.appData.grades || [];
     const studentOf = t => window.appData.students.find(s => s.id === t.studentId) || {};
@@ -2984,8 +2984,8 @@ function renderTeacherTasksTable() {
         String(b.date || "").localeCompare(String(a.date || "")) ||
         zh(a.title, b.title) ||
         (gradeRank(a) - gradeRank(b)) ||
-        zh(studentOf(a).name, studentOf(b).name) ||
-        zh(studentOf(a).school, studentOf(b).school));
+        zh(studentOf(a).school, studentOf(b).school) ||
+        zh(studentOf(a).name, studentOf(b).name));
 
     visibleReviewIds = tasks.map(t => String(t.id));
 
