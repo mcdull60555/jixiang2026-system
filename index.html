@@ -1689,10 +1689,17 @@
 
     <!-- ==================== JavaScript 核心互動邏輯 ==================== -->
     <script>
-let currentRole = "student";
 let loggedInStudentId = sessionStorage.getItem("loggedInStudentId") || null;
 let isTeacherLoggedIn = sessionStorage.getItem("isTeacherLoggedIn") === "true";
 let authToken = sessionStorage.getItem("authToken") || null; // 登入後端拿到的憑證，所有讀寫請求都要帶著它
+// 重新整理（F5）時維持原本所在的老師端／學生端：sessionStorage 在同一個分頁重新整理後仍會保留
+let currentRole = (() => {
+    let saved = null;
+    try { saved = sessionStorage.getItem("currentRole"); } catch (e) { /* 忽略 */ }
+    if (saved === "teacher") return isTeacherLoggedIn ? "teacher" : "student";
+    if (saved === "student") return "student";
+    return (isTeacherLoggedIn && !loggedInStudentId) ? "teacher" : "student";
+})();
 let lastActivityTime = parseInt(sessionStorage.getItem("lastActivityTime") || Date.now(), 10);
 const IDLE_TIMEOUT_MS = 60 * 60 * 1000;
 
@@ -1928,6 +1935,7 @@ function logoutStudent() {
 }
 
 function renderRoleView() {
+    try { sessionStorage.setItem("currentRole", currentRole); } catch (e) { /* 忽略 */ }
     renderMarquee_();
     // 不是老師登入時，右下角「N 個待審核」一定要收起來（例如登出後換學生登入）
     if (!(currentRole === "teacher" && isTeacherLoggedIn)) document.getElementById("teacherPendingReviewBadge")?.classList.add("hidden");
@@ -1955,6 +1963,12 @@ function renderRoleView() {
         studentView.classList.add("hidden");
 
         renderTeacherDashboard();
+        if (!window._teacherTabRestored) { // 重新整理後回到上次所在的頁籤
+            window._teacherTabRestored = true;
+            let tab = null;
+            try { tab = sessionStorage.getItem("teacherTab"); } catch (e) { /* 忽略 */ }
+            if (tab && tab !== "tasks" && document.getElementById("teacher" + tab.charAt(0).toUpperCase() + tab.slice(1) + "Tab")) switchTeacherTab(tab);
+        }
     } else {
         switchBtnText.innerText = "切換至老師端";
         roleBadge.innerText = "家長/學生";
@@ -2010,6 +2024,7 @@ function checkAndCleanLifeCycleTasks() {
 /* ==================== 老師端核心邏輯 ==================== */
 
 function switchTeacherTab(tabName) {
+    try { sessionStorage.setItem("teacherTab", tabName); } catch (e) { /* 忽略 */ }
     const tabs = ['tasks', 'dispatch', 'students', 'contactbook', 'submitlog', 'subjects'];
     tabs.forEach(t => {
         const btn = document.getElementById(`tab${t.charAt(0).toUpperCase() + t.slice(1)}Btn`);
