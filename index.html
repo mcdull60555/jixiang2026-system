@@ -952,26 +952,17 @@
                 <button onclick="closeModal('contactBookModal')" class="text-slate-400 hover:text-slate-600 p-1"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <input type="hidden" id="contactBookEditId">
-            <div class="space-y-3 text-xs">
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="block font-bold text-slate-700 mb-1">日期 *</label>
-                        <input type="date" id="contactBookDateInput" onchange="updateContactBookWeekday()" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                    </div>
-                    <div>
-                        <label class="block font-bold text-slate-700 mb-1">星期（依日期自動帶入）</label>
-                        <div id="contactBookWeekdayText" class="w-full border border-slate-200 bg-slate-50 rounded-xl px-3 py-2 text-xs font-bold text-slate-600">—</div>
-                    </div>
+            <div id="contactBookDays" class="space-y-3 text-xs"></div>
+            <div id="contactBookBatchTools" class="space-y-2">
+                <div class="grid grid-cols-2 gap-2">
+                    <button type="button" onclick="addContactBookDay_(true)" class="border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl px-2 py-2 text-xs"><i class="fa-solid fa-copy mr-1"></i>再加一天（複製上一天）</button>
+                    <button type="button" onclick="addContactBookDay_(false)" class="border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-bold rounded-xl px-2 py-2 text-xs"><i class="fa-solid fa-calendar-plus mr-1"></i>再加一天（空白）</button>
                 </div>
-                <div>
-                    <label class="block font-bold text-slate-700 mb-1">進度內容 *（每一項作業一列，系統自動編號；按右側「全體」可指定年級與學校）</label>
-                    <div id="contactBookItems" class="space-y-2"></div>
-                    <button type="button" onclick="addContactBookItemRow_('')" class="mt-2 text-indigo-600 font-bold text-xs hover:underline"><i class="fa-solid fa-plus mr-1"></i>新增一項</button>
-                </div>
+                <div class="text-[11px] text-slate-400 leading-relaxed">可一次新增多天（最多 <span id="contactBookMaxDays"></span> 天）。新加的那天會自動排到下一個週一～週五，日期可以再改。</div>
             </div>
             <div class="flex space-x-2 pt-2">
                 <button onclick="closeModal('contactBookModal')" class="flex-1 bg-slate-100 text-slate-600 font-bold py-2.5 rounded-xl text-sm">取消</button>
-                <button onclick="saveContactBookEntry()" class="flex-1 bg-indigo-600 text-white font-bold py-2.5 rounded-xl text-sm">儲存</button>
+                <button id="contactBookSaveBtn" onclick="saveContactBookEntry()" class="flex-1 bg-indigo-600 text-white font-bold py-2.5 rounded-xl text-sm">儲存</button>
             </div>
         </div>
     </div>
@@ -2527,26 +2518,96 @@ function toggleContactBookExpired(prefix) {
     renderContactBook();
 }
 
-function updateContactBookWeekday() {
-    const v = document.getElementById("contactBookDateInput").value;
-    document.getElementById("contactBookWeekdayText").innerText = (v && weekdayOf_(v)) || "—";
+/* 新增聯絡簿可一次填多天（每一天一個區塊）；修改時只有一天 */
+const CONTACT_BOOK_MAX_DAYS = 20; // 後端一次最多 50 個操作，這裡留餘裕
+
+function cbDayBlocks_() { return [...document.querySelectorAll("#contactBookDays .cb-day")]; }
+// 下一個週一～週五
+function nextWeekdayStr_(dateStr) {
+    let d = addDaysStr_(dateStr, 1);
+    while (["星期六", "星期日"].includes(weekdayOf_(d))) d = addDaysStr_(d, 1);
+    return d;
+}
+function readCbDayItems_(dayEl) {
+    return [...dayEl.querySelectorAll(".cb-item-row")].map(r => ({
+        text: r.querySelector(".cb-item-input").value.trim(),
+        targets: readCbTargets_(r)
+    })).filter(it => it.text);
+}
+function refreshContactBookDays_() {
+    const days = cbDayBlocks_();
+    const editing = !!document.getElementById("contactBookEditId").value;
+    const multi = days.length > 1;
+    days.forEach((el, i) => {
+        const v = el.querySelector(".cb-date").value;
+        el.querySelector(".cb-weekday").innerText = (v && weekdayOf_(v)) || "—";
+        el.querySelector(".cb-day-no").innerText = multi ? `第 ${i + 1} 天　` : "";
+        el.querySelector(".cb-day-del").classList.toggle("hidden", !multi);
+        el.classList.toggle("border", multi);
+        el.classList.toggle("p-3", multi);
+    });
+    document.getElementById("contactBookBatchTools").classList.toggle("hidden", editing || days.length >= CONTACT_BOOK_MAX_DAYS);
+    document.getElementById("contactBookSaveBtn").innerText = multi ? `儲存（共 ${days.length} 天）` : "儲存";
+}
+// 加一個「日期＋進度內容」區塊；items 為 [{text, targets}]
+function addContactBookDayBlock_(date, items) {
+    const wrap = document.getElementById("contactBookDays");
+    const day = document.createElement("div");
+    day.className = "cb-day border-slate-200 rounded-xl space-y-3";
+    day.innerHTML = `<div class="flex items-end gap-2">
+            <div class="flex-1 min-w-0">
+                <label class="block font-bold text-slate-700 mb-1"><span class="cb-day-no text-indigo-600"></span>日期 *</label>
+                <input type="date" class="cb-date w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+            <div class="flex-1 min-w-0">
+                <label class="block font-bold text-slate-700 mb-1">星期（依日期自動帶入）</label>
+                <div class="cb-weekday w-full border border-slate-200 bg-slate-50 rounded-xl px-3 py-2 text-xs font-bold text-slate-600">—</div>
+            </div>
+            <button type="button" class="cb-day-del hidden shrink-0 text-slate-400 hover:text-rose-500 px-2 py-2" title="移除這一天"><i class="fa-solid fa-trash-can"></i></button>
+        </div>
+        <div>
+            <label class="block font-bold text-slate-700 mb-1">進度內容 *（每一項作業一列，系統自動編號；按右側「全體」可指定年級與學校）</label>
+            <div class="cb-items space-y-2"></div>
+            <button type="button" class="cb-add-item mt-2 text-indigo-600 font-bold text-xs hover:underline"><i class="fa-solid fa-plus mr-1"></i>新增一項</button>
+        </div>`;
+    day.querySelector(".cb-date").value = date || "";
+    day.querySelector(".cb-date").onchange = refreshContactBookDays_;
+    const itemsWrap = day.querySelector(".cb-items");
+    day.querySelector(".cb-add-item").onclick = () => addContactBookItemRow_("", [], itemsWrap);
+    day.querySelector(".cb-day-del").onclick = () => {
+        const v = day.querySelector(".cb-date").value;
+        if (readCbDayItems_(day).length && !confirm(`確定要移除 ${v || "這一天"} ${v ? weekdayOf_(v) : ""} 這一天嗎？`)) return;
+        day.remove(); refreshContactBookDays_();
+    };
+    wrap.appendChild(day);
+    items = items || [];
+    const n = Math.max(4, items.length);
+    for (let i = 0; i < n; i++) { const it = items[i]; addContactBookItemRow_(it ? it.text : "", it ? it.targets : [], itemsWrap); }
+    refreshContactBookDays_();
+    return day;
+}
+// 「再加一天」：copy=true 時複製最後一天的內容（含指定的年級／學校）
+function addContactBookDay_(copy) {
+    const days = cbDayBlocks_();
+    if (days.length >= CONTACT_BOOK_MAX_DAYS) { alert(`一次最多新增 ${CONTACT_BOOK_MAX_DAYS} 天。`); return; }
+    const last = days[days.length - 1];
+    const lastDate = (last && last.querySelector(".cb-date").value) || localDateStr_();
+    const day = addContactBookDayBlock_(nextWeekdayStr_(lastDate), copy && last ? readCbDayItems_(last) : []);
+    day.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function openContactBookModal(id) {
     const entry = id ? (window.appData.contactBook || []).find(x => x.id === id) : null;
     document.getElementById("contactBookModalTitle").innerText = entry ? "修改聯絡簿" : "新增聯絡簿";
     document.getElementById("contactBookEditId").value = entry ? entry.id : "";
-    document.getElementById("contactBookDateInput").value = entry ? entry.date : localDateStr_();
-    const items = entry ? entryItems_(entry) : [];
-    document.getElementById("contactBookItems").innerHTML = "";
-    const n = Math.max(4, items.length);
-    for (let i = 0; i < n; i++) { const it = items[i]; addContactBookItemRow_(it ? it.text : "", it ? it.targets : []); }
-    updateContactBookWeekday();
+    document.getElementById("contactBookMaxDays").innerText = CONTACT_BOOK_MAX_DAYS;
+    document.getElementById("contactBookDays").innerHTML = "";
+    addContactBookDayBlock_(entry ? entry.date : localDateStr_(), entry ? entryItems_(entry) : []);
     openModal("contactBookModal");
 }
 
-function renumberContactBookItems_() {
-    document.querySelectorAll("#contactBookItems .cb-item-no").forEach((el, i) => { el.innerText = (i + 1) + "."; });
+function renumberContactBookItems_(itemsWrap) {
+    itemsWrap.querySelectorAll(".cb-item-no").forEach((el, i) => { el.innerText = (i + 1) + "."; });
 }
 function readCbTargets_(row) {
     return [...row.querySelectorAll(".cb-gblock")].filter(b => b.querySelector(".cb-g").checked).map(b => ({
@@ -2560,9 +2621,9 @@ function refreshCbTargetLabel_(row) {
     btn.innerHTML = `<i class="fa-solid fa-users mr-1"></i>${escHtml_(itemTargetLabel_({ targets }))}`;
     btn.classList.toggle("bg-amber-100", targets.length > 0);
 }
-function addContactBookItemRow_(text, targets) {
+function addContactBookItemRow_(text, targets, wrap) {
     targets = targets || [];
-    const wrap = document.getElementById("contactBookItems");
+    wrap = wrap || document.querySelector("#contactBookDays .cb-day:last-child .cb-items");
     const row = document.createElement("div");
     row.className = "cb-item-row";
     const blocks = (window.appData.grades || []).map(g => {
@@ -2589,7 +2650,7 @@ function addContactBookItemRow_(text, targets) {
     row.querySelector(".cb-del").onclick = () => {
         const t = row.querySelector(".cb-item-input").value.trim();
         if (!confirm(t ? `確定要移除「${t}」這一項嗎？` : "確定要移除這一項嗎？")) return;
-        row.remove(); renumberContactBookItems_();
+        row.remove(); renumberContactBookItems_(wrap);
     };
     row.querySelector(".cb-target-btn").onclick = () => row.querySelector(".cb-target-panel").classList.toggle("hidden");
     row.querySelectorAll(".cb-g").forEach(c => c.onchange = () => {
@@ -2601,7 +2662,7 @@ function addContactBookItemRow_(text, targets) {
     row.querySelectorAll(".cb-s").forEach(c => c.onchange = () => refreshCbTargetLabel_(row));
     wrap.appendChild(row);
     refreshCbTargetLabel_(row);
-    renumberContactBookItems_();
+    renumberContactBookItems_(wrap);
 }
 
 /* 老師端聯絡簿：只送「這一則」的新增／修改／刪除（後端逐筆套用），不會把整份資料存回去而蓋掉別處的修改 */
@@ -2623,6 +2684,7 @@ async function patchWithRetry_(ops) {
     throw lastErr;
 }
 async function contactBookPatch_(op, mutateLocal) {
+    const ops = Array.isArray(op) ? op : [op]; // 可一次送多則（批次新增多天）
     const snapshot = JSON.stringify(window.appData.contactBook || []);
     mutateLocal();
     renderContactBook();
@@ -2631,7 +2693,7 @@ async function contactBookPatch_(op, mutateLocal) {
     showBusy_("同步中，請稍候…");
     let ok = false;
     try {
-        const result = await patchWithRetry_([op]);
+        const result = await patchWithRetry_(ops);
         if (Array.isArray(result.contactBook)) window.appData.contactBook = result.contactBook;
         ok = true;
     } catch (e) {
@@ -2657,29 +2719,46 @@ async function contactBookPatch_(op, mutateLocal) {
 
 async function saveContactBookEntry() {
     const id = document.getElementById("contactBookEditId").value;
-    const date = document.getElementById("contactBookDateInput").value;
-    const items = [...document.querySelectorAll("#contactBookItems .cb-item-row")].map(r => ({
-        text: r.querySelector(".cb-item-input").value.trim(),
-        targets: readCbTargets_(r)
-    })).filter(it => it.text);
-    const content = items.map((it, i) => `${i + 1}. ${it.text}`).join("\n");
-    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) { alert("請選擇日期！"); return; }
-    if (!content) { alert("請至少填寫一項進度內容！"); return; }
+    const days = cbDayBlocks_();
+    const multi = days.length > 1;
+    const drafts = [];
+    for (let i = 0; i < days.length; i++) {
+        const date = days[i].querySelector(".cb-date").value;
+        const items = readCbDayItems_(days[i]);
+        const label = multi ? `第 ${i + 1} 天` : "";
+        if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) { alert(`請選擇${label}的日期！`); return; }
+        if (!items.length) { alert(multi ? `${label}（${date} ${weekdayOf_(date)}）還沒有填寫進度內容！\n不需要這一天的話，請按該天右上角的垃圾桶移除。` : "請至少填寫一項進度內容！"); return; }
+        drafts.push({ date, items });
+    }
+    const dates = drafts.map(d => d.date);
+    const dup = [...new Set(dates.filter((d, i) => dates.indexOf(d) !== i))];
+    if (dup.length) { alert("下列日期重複了，請修改後再儲存：\n" + dup.map(d => `${d} ${weekdayOf_(d)}`).join("\n")); return; }
 
     if (!Array.isArray(window.appData.contactBook)) window.appData.contactBook = [];
-    const weekday = weekdayOf_(date);
-    let entry;
+    if (!id) {
+        const exist = dates.filter(d => window.appData.contactBook.some(e => e && e.date === d));
+        if (exist.length && !confirm("下列日期已經有聯絡簿，仍要再各新增一筆嗎？\n\n" + exist.map(d => `${d} ${weekdayOf_(d)}`).join("\n"))) return;
+    }
+
+    const entries = [];
     if (id) {
         const cur = window.appData.contactBook.find(x => x.id === id);
         if (!cur) { alert("找不到這筆聯絡簿，可能已被刪除。"); closeModal("contactBookModal"); return; }
-        entry = { ...cur, date, weekday, content, items };
+        const { date, items } = drafts[0];
+        entries.push({ ...cur, date, weekday: weekdayOf_(date), content: items.map((it, i) => `${i + 1}. ${it.text}`).join("\n"), items });
     } else {
-        entry = { id: "cb_" + Date.now() + "_" + Math.random().toString(36).substr(2, 4), date, weekday, content, items };
+        const stamp = Date.now();
+        drafts.forEach(({ date, items }, k) => entries.push({
+            id: "cb_" + stamp + "_" + k + Math.random().toString(36).substr(2, 4),
+            date, weekday: weekdayOf_(date), content: items.map((it, i) => `${i + 1}. ${it.text}`).join("\n"), items
+        }));
     }
     closeModal("contactBookModal");
-    await contactBookPatch_({ op: "cbSet", entry }, () => {
-        const i = window.appData.contactBook.findIndex(x => x.id === entry.id);
-        if (i >= 0) window.appData.contactBook[i] = entry; else window.appData.contactBook.push(entry);
+    await contactBookPatch_(entries.map(entry => ({ op: "cbSet", entry })), () => {
+        entries.forEach(entry => {
+            const i = window.appData.contactBook.findIndex(x => x.id === entry.id);
+            if (i >= 0) window.appData.contactBook[i] = entry; else window.appData.contactBook.push(entry);
+        });
     });
 }
 
