@@ -785,6 +785,7 @@
                         <p class="font-bold text-slate-600">勾選要派發的學生：</p>
                         <label class="flex items-center space-x-1 font-bold text-indigo-600 cursor-pointer"><input type="checkbox" id="singleEditSelectAll" onchange="toggleAllStudentCbs_('single-edit-st-cb', this.checked)" class="rounded text-indigo-600"><span>全選</span></label>
                     </div>
+                    <div class="flex flex-wrap items-center gap-1 text-[11px]"><span class="font-bold text-slate-500">依年級勾選：</span><span id="singleEditGradePick" class="contents"></span></div>
                     <div id="singleEditStudentCheckboxes" class="grid grid-cols-2 gap-2"></div>
                 </div>
 
@@ -1109,6 +1110,7 @@
                         <p class="text-xs font-bold text-slate-500">勾選要派發的學生：</p>
                         <label class="flex items-center space-x-1 text-xs font-bold text-indigo-600 cursor-pointer"><input type="checkbox" id="taskSelectAll" onchange="toggleAllStudentCbs_('task-st-cb', this.checked)" class="rounded text-indigo-600"><span>全選</span></label>
                     </div>
+                    <div class="flex flex-wrap items-center gap-1 text-[11px]"><span class="font-bold text-slate-500">依年級勾選：</span><span id="taskGradePick" class="contents"></span></div>
                     <div id="multiStudentCheckboxes" class="grid grid-cols-2 gap-2 text-xs"></div>
                 </div>
 
@@ -3514,6 +3516,7 @@ function openSingleEditDispatchModal(idsStr) {
     }
 
     renderSingleEditStudentCheckboxes(assignedStudentIds);
+    setupGradePick_(document.getElementById("singleEditGradePick"), () => [...document.querySelectorAll(".single-edit-st-cb")], document.getElementById("singleEditMultiStudentContainer"));
     toggleSingleEditTargetMode();
     openModal("singleEditDispatchModal");
 }
@@ -4290,6 +4293,41 @@ async function syncContactBookWithDispatch_(changes) {
     return await contactBookPatch_(ops, () => { window.appData.contactBook = keep; });
 }
 
+/* 學生勾選清單的「依年級勾選」按鈕：點一下勾起該年級全部學生（已經全勾就取消），再個別取消不需要的。
+   可以點好幾個年級；按鈕變藍＝該年級全部都勾了 */
+function gradeOfStudent_(id) {
+    const s = (window.appData.students || []).find(x => String(x.id) === String(id));
+    return s ? s.grade : null;
+}
+function setupGradePick_(bar, getCbs, scopeEl) {
+    if (!bar) return;
+    const grades = (window.appData.grades || []).filter(g => (window.appData.students || []).some(s => s.grade === g));
+    bar.innerHTML = grades.length
+        ? grades.map(g => `<button type="button" class="grade-pick border border-indigo-200 rounded-lg px-2 py-0.5 text-[11px] font-bold" data-grade="${escHtml_(g)}">${escHtml_(g)}</button>`).join("")
+        : '<span class="text-slate-400">尚無年級</span>';
+    const cbsOf = g => getCbs().filter(c => gradeOfStudent_(c.value) === g);
+    const refresh = () => bar.querySelectorAll(".grade-pick").forEach(b => {
+        const cbs = cbsOf(b.dataset.grade);
+        const on = cbs.length > 0 && cbs.every(c => c.checked);
+        b.classList.toggle("bg-indigo-600", on); b.classList.toggle("text-white", on);
+        b.classList.toggle("bg-white", !on); b.classList.toggle("text-indigo-600", !on);
+    });
+    bar.querySelectorAll(".grade-pick").forEach(b => b.onclick = () => {
+        const cbs = cbsOf(b.dataset.grade);
+        const on = !(cbs.length && cbs.every(c => c.checked));
+        cbs.forEach(c => { if (c.checked !== on) { c.checked = on; c.dispatchEvent(new Event("change", { bubbles: true })); } });
+        refresh();
+    });
+    if (scopeEl) {
+        scopeEl._gradePickRefresh = refresh;
+        if (!scopeEl._gradePickBound) {
+            scopeEl._gradePickBound = true;
+            scopeEl.addEventListener("change", () => scopeEl._gradePickRefresh && scopeEl._gradePickRefresh());
+        }
+    }
+    refresh();
+}
+
 /* 派發任務 MODAL 邏輯 */
 /* 批次派發可一次填多天：每一天一個區塊（發布日期＋項目清單），派發對象共用 */
 const ASSIGN_MAX_DAYS = 20;
@@ -4433,6 +4471,7 @@ function openAssignTaskModal() {
     gradeSelect.innerHTML = (window.appData.grades || []).map(g => `<option value="${escHtml_(g)}">${escHtml_(g)}</option>`).join('');
 
     renderAssignTaskStudentCheckboxes();
+    setupGradePick_(document.getElementById("taskGradePick"), () => [...document.querySelectorAll(".task-st-cb")], document.getElementById("multiStudentContainer"));
     gradeSelect.onchange = refreshAllRowTargetLabels_;
     document.getElementById("multiStudentContainer").onchange = refreshAllRowTargetLabels_;
     toggleMultiSelectMode();
@@ -4505,7 +4544,10 @@ function addDynamicTaskRow(container, preset) {
                     </select>
                     <div class="row-grades hidden flex flex-wrap gap-1">${gradeChips}</div>
                     <div class="row-students hidden space-y-1">
-                        <label class="inline-flex items-center gap-1 font-bold text-indigo-600 cursor-pointer"><input type="checkbox" class="row-st-all rounded">全選</label>
+                        <div class="flex flex-wrap items-center gap-1 text-[11px]">
+                            <label class="inline-flex items-center gap-1 font-bold text-indigo-600 cursor-pointer mr-2"><input type="checkbox" class="row-st-all rounded">全選</label>
+                            <span class="font-bold text-slate-500">依年級勾選：</span><span class="row-grade-pick contents"></span>
+                        </div>
                         <div class="grid grid-cols-2 gap-1 max-h-40 overflow-y-auto custom-scrollbar">${studentChips}</div>
                     </div>
                 </div>
@@ -4543,6 +4585,7 @@ function addDynamicTaskRow(container, preset) {
     sts.forEach(i => i.onchange = () => { syncAll(); refreshRowTargetLabel_(newRow); });
     stAll.onchange = () => { sts.forEach(i => { i.checked = stAll.checked; }); refreshRowTargetLabel_(newRow); };
     syncAll();
+    setupGradePick_(newRow.querySelector(".row-grade-pick"), () => sts, newRow.querySelector(".row-students"));
     refreshRowTargetLabel_(newRow);
 }
 
