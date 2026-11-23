@@ -1121,6 +1121,10 @@
                         </div>
                         <div class="text-[11px] text-slate-400 leading-relaxed">可一次派發多天的項目（最多 <span id="assignMaxDays"></span> 天），派發對象相同。新加的那天會自動排到下一個週一～週五，日期可以再改；日期在未來的項目會成為「預約派發」。</div>
                     </div>
+                    <label class="flex items-start gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 text-xs font-bold text-emerald-800 cursor-pointer">
+                        <input type="checkbox" id="assignToContactBook" class="mt-0.5 rounded text-emerald-600">
+                        <span>同時加入電子聯絡簿<span class="block font-medium text-emerald-700/80">派發的項目會自動寫進同一天的聯絡簿（已有就接在後面）；之後修改或刪除派發，聯絡簿會跟著改</span></span>
+                    </label>
                 </div>
             </div>
             <div class="flex space-x-2 pt-2">
@@ -2442,7 +2446,11 @@ function normalizeItemTargets_(it) {
 }
 function entryItems_(e) {
     if (Array.isArray(e.items) && e.items.length) {
-        return e.items.map(it => ({ text: String(it.text || "").trim(), targets: normalizeItemTargets_(it) })).filter(it => it.text);
+        return e.items.map(it => {
+            const o = { text: String(it.text || "").trim(), targets: normalizeItemTargets_(it) };
+            if (it.dispatch) o.dispatch = it.dispatch; // 由派發連動產生的項目
+            return o;
+        }).filter(it => it.text);
     }
     return parseContactBookItems_(e.content).map(t => ({ text: t, targets: [] }));
 }
@@ -2469,7 +2477,7 @@ function contactBookItemsHtml_(e, viewer) {
     const showTag = viewer === undefined; // 老師端才標示對象
     return `<div class="text-[11px] font-bold text-indigo-600 mt-1">共 ${items.length} 項作業</div>
         <ol class="mt-1 space-y-0.5 text-xs sm:text-sm text-slate-700">${items.map((it, i) =>
-            `<li class="flex gap-1.5"><span class="shrink-0 font-bold text-indigo-600">${i + 1}.</span><span class="min-w-0 break-words whitespace-pre-wrap">${escHtml_(it.text)}${showTag && it.targets.length ? ` <span class="inline-block text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded align-middle">${escHtml_(itemTargetLabel_(it))}</span>` : ""}</span></li>`).join("")}</ol>`;
+            `<li class="flex gap-1.5"><span class="shrink-0 font-bold text-indigo-600">${i + 1}.</span><span class="min-w-0 break-words whitespace-pre-wrap">${escHtml_(it.text)}${showTag && it.dispatch ? ' <span class="inline-block text-[10px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded align-middle" title="由派發項目自動產生">派發</span>' : ""}${showTag && it.targets.length ? ` <span class="inline-block text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded align-middle">${escHtml_(itemTargetLabel_(it))}</span>` : ""}</span></li>`).join("")}</ol>`;
 }
 
 function contactBookCardHtml_(e, today, editable, viewer) {
@@ -2540,10 +2548,11 @@ function nextWeekdayStr_(dateStr) {
     return d;
 }
 function readCbDayItems_(dayEl) {
-    return [...dayEl.querySelectorAll(".cb-item-row")].map(r => ({
-        text: r.querySelector(".cb-item-input").value.trim(),
-        targets: readCbTargets_(r)
-    })).filter(it => it.text);
+    return [...dayEl.querySelectorAll(".cb-item-row")].map(r => {
+        const it = { text: r.querySelector(".cb-item-input").value.trim(), targets: readCbTargets_(r) };
+        if (r._dispatch) it.dispatch = r._dispatch;
+        return it;
+    }).filter(it => it.text);
 }
 function refreshContactBookDays_() {
     const days = cbDayBlocks_();
@@ -2593,7 +2602,7 @@ function addContactBookDayBlock_(date, items) {
     wrap.appendChild(day);
     items = items || [];
     const n = Math.max(4, items.length);
-    for (let i = 0; i < n; i++) { const it = items[i]; addContactBookItemRow_(it ? it.text : "", it ? it.targets : [], itemsWrap); }
+    for (let i = 0; i < n; i++) { const it = items[i]; addContactBookItemRow_(it ? it.text : "", it ? it.targets : [], itemsWrap, it && it.dispatch); }
     refreshContactBookDays_();
     return day;
 }
@@ -2603,7 +2612,7 @@ function addContactBookDay_(copy) {
     if (days.length >= CONTACT_BOOK_MAX_DAYS) { alert(`一次最多新增 ${CONTACT_BOOK_MAX_DAYS} 天。`); return; }
     const last = days[days.length - 1];
     const lastDate = (last && last.querySelector(".cb-date").value) || localDateStr_();
-    const day = addContactBookDayBlock_(nextWeekdayStr_(lastDate), copy && last ? readCbDayItems_(last) : []);
+    const day = addContactBookDayBlock_(nextWeekdayStr_(lastDate), copy && last ? readCbDayItems_(last).map(it => ({ text: it.text, targets: it.targets })) : []);
     day.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -2632,7 +2641,7 @@ function refreshCbTargetLabel_(row) {
     btn.innerHTML = `<i class="fa-solid fa-users mr-1"></i>${escHtml_(itemTargetLabel_({ targets }))}`;
     btn.classList.toggle("bg-amber-100", targets.length > 0);
 }
-function addContactBookItemRow_(text, targets, wrap) {
+function addContactBookItemRow_(text, targets, wrap, dispatch) {
     targets = targets || [];
     wrap = wrap || document.querySelector("#contactBookDays .cb-day:last-child .cb-items");
     const row = document.createElement("div");
@@ -2658,6 +2667,10 @@ function addContactBookItemRow_(text, targets, wrap) {
             ${blocks}
         </div>`;
     row.querySelector(".cb-item-input").value = text || "";
+    if (dispatch) { // 派發連動的項目：記住對應的派發，並標示出來
+        row._dispatch = dispatch;
+        row.querySelector(".cb-item-no").insertAdjacentHTML("afterend", '<span class="shrink-0 text-[10px] font-bold bg-emerald-100 text-emerald-700 px-1 py-0.5 rounded" title="由派發項目自動產生；修改或刪除派發時會跟著更新">派發</span>');
+    }
     // Tab：跳到這一天下一個空白的項目欄位；後面都填滿了就自動新增一列（Shift+Tab 維持原本的往前）
     row.querySelector(".cb-item-input").addEventListener("keydown", ev => {
         if (ev.key !== "Tab" || ev.shiftKey || ev.isComposing || ev.keyCode === 229) return;
@@ -2714,7 +2727,8 @@ async function contactBookPatch_(op, mutateLocal) {
     showBusy_("同步中，請稍候…");
     let ok = false;
     try {
-        const result = await patchWithRetry_(ops);
+        let result = null;
+        for (let i = 0; i < ops.length; i += 40) result = await patchWithRetry_(ops.slice(i, i + 40)); // 後端一次最多 50 個操作
         if (Array.isArray(result.contactBook)) window.appData.contactBook = result.contactBook;
         ok = true;
     } catch (e) {
@@ -3449,8 +3463,10 @@ function toggleSelectAllDispatch(type, checked) {
 async function deleteDispatchGroup(idsStr) {
     if (!confirm("⚠️ 確定要刪除這筆派發項目嗎？此操作將會「同步連動刪除」所有相關學生的該項進度紀錄。")) return;
     const ids = idsStr.split(',');
+    const keys = uniqueDispatchKeys_(window.appData.tasks.filter(t => ids.includes(t.id)));
     window.appData.tasks = window.appData.tasks.filter(t => !ids.includes(t.id));
-    await window.saveData();
+    const ok = await window.saveData();
+    if (ok) await syncContactBookWithDispatch_(keys.map(k => ({ old: k, neu: null })));
 }
 
 async function batchDeleteDispatches() {
@@ -3460,13 +3476,15 @@ async function batchDeleteDispatches() {
     }
     if (!confirm(`⚠️ 確定要刪除選取的 ${selectedDispatchIds.size} 組派發項目嗎？這將同步連動刪除所有對應學生的作業與考卷紀錄。`)) return;
 
+    const keys = uniqueDispatchKeys_(window.appData.tasks.filter(t => selectedDispatchIds.has(`${t.type}_${t.subject}_${t.title}_${t.date}`)));
     window.appData.tasks = window.appData.tasks.filter(t => {
         const key = `${t.type}_${t.subject}_${t.title}_${t.date}`;
         return !selectedDispatchIds.has(key);
     });
 
     selectedDispatchIds.clear();
-    await window.saveData();
+    const ok = await window.saveData();
+    if (ok) await syncContactBookWithDispatch_(keys.map(k => ({ old: k, neu: null })));
 }
 
 function openSingleEditDispatchModal(idsStr) {
@@ -3594,8 +3612,10 @@ async function saveSingleDispatchEdit() {
         });
     });
 
+    const cbChange = oldTasks.length ? [{ old: dispatchKeyOf_(oldTasks[0]), neu: { type: newType, subject: newSub, title: newTitle, date: newDate } }] : [];
     closeModal("singleEditDispatchModal");
-    await window.saveData();
+    const ok = await window.saveData();
+    if (ok) await syncContactBookWithDispatch_(cbChange);
 }
 
 function openBatchEditDispatchModal() {
@@ -3652,6 +3672,7 @@ async function confirmBatchEditDispatches() {
     }
 
     const selectedKeys = Array.from(selectedDispatchIds);
+    const cbChanges = [];
     selectedKeys.forEach(key => {
         const matchingTasks = window.appData.tasks.filter(t => `${t.type}_${t.subject}_${t.title}_${t.date}` === key);
         if (matchingTasks.length === 0) return;
@@ -3661,6 +3682,7 @@ async function confirmBatchEditDispatches() {
         const finalSub = newSub || sample.subject;
         const finalType = newType || sample.type;
         const finalTitle = newTitle || sample.title;
+        cbChanges.push({ old: dispatchKeyOf_(sample), neu: { type: finalType, subject: finalSub, title: finalTitle, date: finalDate } });
 
         let targetStudentIds = [];
         if (targetMode === "all") {
@@ -3699,7 +3721,8 @@ async function confirmBatchEditDispatches() {
 
     selectedDispatchIds.clear();
     closeModal("batchEditDispatchModal");
-    await window.saveData();
+    const ok = await window.saveData();
+    if (ok) await syncContactBookWithDispatch_(cbChanges);
 }
 
 const DEFAULT_STUDENT_PWD = "0000"; // 新增學生的預設密碼
@@ -4174,6 +4197,99 @@ async function removeSubject(name) {
     await window.saveData();
 }
 
+/* ==================== 派發項目 → 電子聯絡簿 連動 ====================
+   由派發自動寫進聯絡簿的項目會帶 dispatch:{type, subject, title}，加上那一則聯絡簿的日期，
+   就對應到派發項目維護中心的一組（類型＋科目＋名稱＋日期）。
+   - 批次派發有勾「同時加入電子聯絡簿」：加到同一天的聯絡簿後面（沒有就新增一則；名稱一樣的不重複加）
+   - 修改派發（名稱、科目、類型、日期、對象）：聯絡簿上對應的那一項跟著改；改日期就搬到新日期
+   - 刪除派發：聯絡簿上對應的那一項跟著刪；那一則刪到沒有項目就整則刪掉
+   - 老師在聯絡簿手動寫的項目、以及連動功能上線前派發的項目都不會被動到
+   - 自動清理歸檔項目不會動到聯絡簿 */
+const ASSIGN_CB_PREF_KEY = "jx-assign-to-contactbook";
+function dispatchCbText_(type, subject, title) {
+    return `【${subject}${type === "考卷" ? "・考卷" : ""}】${title}`;
+}
+function dispatchKeyOf_(t) { return { type: t.type, subject: t.subject, title: t.title, date: t.date }; }
+function dispatchKeyStr_(k) { return `${k.type}_${k.subject}_${k.title}_${k.date}`; }
+function uniqueDispatchKeys_(tasks) {
+    const m = new Map();
+    tasks.forEach(t => { const k = dispatchKeyOf_(t); m.set(dispatchKeyStr_(k), k); });
+    return [...m.values()];
+}
+function sameDispatch_(it, k) {
+    return !!(it && it.dispatch && it.dispatch.type === k.type && it.dispatch.subject === k.subject && it.dispatch.title === k.title);
+}
+// 派給哪些學生 → 聯絡簿的對象（年級＋學校）；全班就是「全體」
+function cbTargetsForStudentIds_(ids) {
+    const set = new Set(ids);
+    const all = window.appData.students || [];
+    if (all.length && all.every(s => set.has(s.id))) return [];
+    const byGrade = {};
+    all.filter(s => set.has(s.id)).forEach(s => {
+        (byGrade[s.grade] = byGrade[s.grade] || new Set()).add((s.school || "").trim());
+    });
+    return Object.keys(byGrade).map(g => ({ grade: g, schools: [...byGrade[g]].filter(Boolean) })).filter(t => t.schools.length);
+}
+// changes：[{ old: 舊的分組鍵或 null, neu: 新的分組鍵或 null, add: 找不到舊項目時是否新增 }]
+async function syncContactBookWithDispatch_(changes) {
+    if (!changes || !changes.length) return true;
+    const book = JSON.parse(JSON.stringify(window.appData.contactBook || []));
+    const existingIds = new Set(book.map(e => e.id));
+    const touched = new Set();
+    const rawItems = e => (Array.isArray(e.items) && e.items.length) ? e.items : entryItems_(e).map(it => ({ text: it.text, targets: it.targets }));
+    const firstEntryOn = date => book.filter(e => e.date === date).sort((a, b) => String(a.id).localeCompare(String(b.id)))[0];
+    let seq = 0;
+
+    changes.forEach(({ old, neu, add }) => {
+        let placed = null; // 舊項目原本的位置（同一天修改時放回原位）
+        if (old) {
+            book.filter(e => e.date === old.date).forEach(e => {
+                const items = rawItems(e);
+                for (let i = items.length - 1; i >= 0; i--) {
+                    if (!sameDispatch_(items[i], old)) continue;
+                    items.splice(i, 1);
+                    placed = { entry: e, index: i };
+                }
+                if (placed && placed.entry === e) { e.items = items; touched.add(e.id); }
+            });
+        }
+        if (!neu || (!placed && !add)) return;
+        const ids = (window.appData.tasks || []).filter(t => t.type === neu.type && t.subject === neu.subject && t.title === neu.title && t.date === neu.date).map(t => t.studentId);
+        if (!ids.length) return;
+        const item = { text: dispatchCbText_(neu.type, neu.subject, neu.title), targets: cbTargetsForStudentIds_(ids), dispatch: { type: neu.type, subject: neu.subject, title: neu.title } };
+        if (placed && placed.entry.date === neu.date) {
+            placed.entry.items.splice(Math.min(placed.index, placed.entry.items.length), 0, item);
+            return;
+        }
+        let e = book.find(x => x.date === neu.date && rawItems(x).some(it => sameDispatch_(it, neu))) || firstEntryOn(neu.date);
+        if (!e) {
+            e = { id: "cb_" + Date.now() + "_" + (seq++) + Math.random().toString(36).substr(2, 4), date: neu.date, weekday: weekdayOf_(neu.date), content: "", items: [] };
+            book.push(e);
+        }
+        const items = rawItems(e);
+        const j = items.findIndex(it => sameDispatch_(it, neu) ||
+            (!it.dispatch && [item.text, neu.title].includes(String(it.text || "").trim()))); // 手動寫過一樣的就接管，不重複加
+        if (j >= 0) items[j] = item; else items.push(item);
+        e.items = items;
+        touched.add(e.id);
+    });
+
+    const ops = [];
+    const keep = [];
+    book.forEach(e => {
+        if (!touched.has(e.id)) { keep.push(e); return; }
+        const items = (e.items || []).filter(it => String(it.text || "").trim());
+        if (!items.length) { if (existingIds.has(e.id)) ops.push({ op: "cbDelete", id: e.id }); return; }
+        e.items = items;
+        e.weekday = weekdayOf_(e.date);
+        e.content = items.map((it, i) => `${i + 1}. ${String(it.text).trim()}`).join("\n");
+        ops.push({ op: "cbSet", entry: e });
+        keep.push(e);
+    });
+    if (!ops.length) return true;
+    return await contactBookPatch_(ops, () => { window.appData.contactBook = keep; });
+}
+
 /* 派發任務 MODAL 邏輯 */
 /* 批次派發可一次填多天：每一天一個區塊（發布日期＋項目清單），派發對象共用 */
 const ASSIGN_MAX_DAYS = 20;
@@ -4305,6 +4421,11 @@ function addAssignDay_(copy) {
 
 function openAssignTaskModal() {
     document.getElementById("assignMaxDays").innerText = ASSIGN_MAX_DAYS;
+    const toCb = document.getElementById("assignToContactBook");
+    let pref = null;
+    try { pref = localStorage.getItem(ASSIGN_CB_PREF_KEY); } catch (e) { /* 忽略 */ }
+    toCb.checked = pref !== "0";
+    toCb.onchange = () => { try { localStorage.setItem(ASSIGN_CB_PREF_KEY, toCb.checked ? "1" : "0"); } catch (e) { /* 忽略 */ } };
     document.getElementById("assignDays").innerHTML = "";
     addAssignDayBlock_(localDateStr_());
 
@@ -4488,8 +4609,11 @@ async function saveAssignedTask() {
         });
     }));
 
+    const toCb = document.getElementById("assignToContactBook").checked;
+    const cbChanges = uniqueDispatchKeys_(plan.flatMap(({ date, rows }) => rows.map(r => ({ ...r, date })))).map(k => ({ old: null, neu: k, add: true }));
     closeModal("assignTaskModal");
-    await window.saveData();
+    const ok = await window.saveData();
+    if (ok && toCb) await syncContactBookWithDispatch_(cbChanges);
 }
 
 /* 密碼與驗證相關 MODAL 邏輯 */
