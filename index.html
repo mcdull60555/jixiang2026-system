@@ -1091,7 +1091,7 @@
             </div>
             <div class="space-y-3">
                 <div>
-                    <label class="block text-xs font-bold text-slate-600 mb-1">派發對象 *</label>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">預設派發對象 *<span class="font-medium text-slate-400">（每一項都套用；個別項目可按「派發對象」另外指定）</span></label>
                     <select id="taskAssignTarget" onchange="toggleMultiSelectMode()" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold">
                         <option value="all">全班學生 (全體派發)</option>
                         <option value="grade">指定整個年級 (批次派發)</option>
@@ -4167,8 +4167,52 @@ function readAssignDayRows_(dayEl) {
     return [...dayEl.querySelectorAll(".as-rows > div")].map(r => ({
         type: r.querySelector(".row-type").value,
         subject: r.querySelector(".row-subject").value,
-        title: r.querySelector(".row-title").value.trim()
+        title: r.querySelector(".row-title").value.trim(),
+        target: readRowTarget_(r)
     }));
+}
+
+/* 個別項目的派發對象：mode ""＝同上方預設、"grade"＝指定年級（可複選）、"multiple"＝勾選學生 */
+function readRowTarget_(row) {
+    const mode = row.querySelector(".row-tmode").value;
+    return {
+        mode,
+        grades: [...row.querySelectorAll(".row-g:checked")].map(i => i.value),
+        students: [...row.querySelectorAll(".row-st:checked")].map(i => i.value)
+    };
+}
+function topAssignTargetLabel_() {
+    const m = document.getElementById("taskAssignTarget").value;
+    if (m === "all") return "全體派發";
+    if (m === "grade") return document.getElementById("taskGradeSelect").value || "指定年級";
+    return `勾選 ${document.querySelectorAll(".task-st-cb:checked").length} 位`;
+}
+function topAssignStudentIds_() {
+    const m = document.getElementById("taskAssignTarget").value;
+    if (m === "all") return window.appData.students.map(s => s.id);
+    if (m === "grade") { const g = document.getElementById("taskGradeSelect").value; return window.appData.students.filter(s => s.grade === g).map(s => s.id); }
+    return [...document.querySelectorAll(".task-st-cb:checked")].map(cb => cb.value);
+}
+function rowTargetStudentIds_(t) {
+    if (t.mode === "grade") return window.appData.students.filter(s => t.grades.includes(s.grade)).map(s => s.id);
+    if (t.mode === "multiple") { const ok = new Set(window.appData.students.map(s => s.id)); return t.students.filter(id => ok.has(id)); }
+    return null; // 同上方預設
+}
+function refreshRowTargetLabel_(row) {
+    const t = readRowTarget_(row);
+    const btn = row.querySelector(".row-target-btn");
+    let text;
+    if (t.mode === "grade") text = t.grades.length ? t.grades.join("、") : "尚未勾選年級";
+    else if (t.mode === "multiple") text = t.students.length ? `勾選 ${t.students.length} 位學生` : "尚未勾選學生";
+    else text = `預設（${topAssignTargetLabel_()}）`;
+    btn.innerHTML = `<i class="fa-solid fa-users mr-1"></i>${escHtml_(text)}`;
+    btn.classList.toggle("bg-amber-100", !!t.mode);
+    btn.classList.toggle("text-amber-800", !!t.mode);
+    row.querySelector(".row-grades").classList.toggle("hidden", t.mode !== "grade");
+    row.querySelector(".row-students").classList.toggle("hidden", t.mode !== "multiple");
+}
+function refreshAllRowTargetLabels_() {
+    document.querySelectorAll("#assignDays .as-rows > div").forEach(refreshRowTargetLabel_);
 }
 function refreshAssignDays_() {
     const days = assignDayBlocks_();
@@ -4244,6 +4288,8 @@ function openAssignTaskModal() {
     gradeSelect.innerHTML = (window.appData.grades || []).map(g => `<option value="${escHtml_(g)}">${escHtml_(g)}</option>`).join('');
 
     renderAssignTaskStudentCheckboxes();
+    gradeSelect.onchange = refreshAllRowTargetLabels_;
+    document.getElementById("multiStudentContainer").onchange = refreshAllRowTargetLabels_;
     toggleMultiSelectMode();
 
     openModal("assignTaskModal");
@@ -4268,6 +4314,7 @@ function toggleMultiSelectMode() {
 
     gradeBox.classList.toggle("hidden", target !== "grade");
     multiBox.classList.toggle("hidden", target !== "multiple");
+    refreshAllRowTargetLabels_();
 }
 
 function addDynamicTaskRow(container, preset) {
@@ -4275,6 +4322,8 @@ function addDynamicTaskRow(container, preset) {
     const rowId = "task_row_" + Date.now() + "_" + Math.random().toString(36).substr(2, 4);
 
     const subjectsOptions = (window.appData.subjects || []).map(s => `<option value="${escHtml_(s)}">${escHtml_(s)}</option>`).join('');
+    const gradeChips = (window.appData.grades || []).map(g => `<label class="inline-flex items-center gap-1 border border-slate-200 rounded-lg px-2 py-1 bg-white cursor-pointer"><input type="checkbox" class="row-g rounded" value="${escHtml_(g)}"><span>${escHtml_(g)}</span></label>`).join('') || '<span class="text-slate-400">尚未建立年級</span>';
+    const studentChips = (window.appData.students || []).map(s => `<label class="flex items-center gap-1 font-bold text-slate-700 cursor-pointer"><input type="checkbox" class="row-st rounded" value="${escHtml_(s.id)}"><span>${s.school ? `<span class="text-slate-400 font-medium">${escHtml_(s.school)}</span> ` : ''}${escHtml_(s.name)} (${escHtml_(s.grade)})</span></label>`).join('');
 
     const rowHtml = `
         <div id="${rowId}" class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs relative">
@@ -4298,6 +4347,24 @@ function addDynamicTaskRow(container, preset) {
                 <label class="block font-bold text-slate-600 mb-1">項目名稱與範圍</label>
                 <input type="text" class="row-title w-full border border-slate-300 rounded-lg px-2 py-1" placeholder="如：國語習作 P.12-15 或 第二單元測驗">
             </div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <span class="font-bold text-slate-600 shrink-0">派發對象</span>
+                    <button type="button" class="row-target-btn min-w-0 truncate border border-slate-200 bg-white rounded-lg px-2 py-1 text-[11px] font-bold text-slate-600" title="這一項要派給誰"></button>
+                </div>
+                <div class="row-target-panel hidden mt-1.5 p-2 rounded-xl bg-white border border-slate-200 space-y-2">
+                    <select class="row-tmode w-full border border-slate-300 rounded-lg px-2 py-1 font-bold">
+                        <option value="">預設（跟上方「預設派發對象」相同）</option>
+                        <option value="grade">指定年級（可複選）</option>
+                        <option value="multiple">指定學生（勾選）</option>
+                    </select>
+                    <div class="row-grades hidden flex flex-wrap gap-1">${gradeChips}</div>
+                    <div class="row-students hidden space-y-1">
+                        <label class="inline-flex items-center gap-1 font-bold text-indigo-600 cursor-pointer"><input type="checkbox" class="row-st-all rounded">全選</label>
+                        <div class="grid grid-cols-2 gap-1 max-h-40 overflow-y-auto custom-scrollbar">${studentChips}</div>
+                    </div>
+                </div>
+            </div>
         </div>
     `;
 
@@ -4315,7 +4382,23 @@ function addDynamicTaskRow(container, preset) {
         if (preset.type) newRow.querySelector(".row-type").value = preset.type;
         if (preset.subject && (window.appData.subjects || []).includes(preset.subject)) newRow.querySelector(".row-subject").value = preset.subject;
         newRow.querySelector(".row-title").value = preset.title || "";
+        const t = preset.target;
+        if (t && t.mode) {
+            newRow.querySelector(".row-tmode").value = t.mode;
+            newRow.querySelectorAll(".row-g").forEach(i => { i.checked = (t.grades || []).includes(i.value); });
+            newRow.querySelectorAll(".row-st").forEach(i => { i.checked = (t.students || []).includes(i.value); });
+        }
     }
+    // 派發對象面板
+    const sts = [...newRow.querySelectorAll(".row-st")], stAll = newRow.querySelector(".row-st-all");
+    const syncAll = () => { stAll.checked = sts.length > 0 && sts.every(i => i.checked); };
+    newRow.querySelector(".row-target-btn").onclick = () => newRow.querySelector(".row-target-panel").classList.toggle("hidden");
+    newRow.querySelector(".row-tmode").onchange = () => refreshRowTargetLabel_(newRow);
+    newRow.querySelectorAll(".row-g").forEach(i => i.onchange = () => refreshRowTargetLabel_(newRow));
+    sts.forEach(i => i.onchange = () => { syncAll(); refreshRowTargetLabel_(newRow); });
+    stAll.onchange = () => { sts.forEach(i => { i.checked = stAll.checked; }); refreshRowTargetLabel_(newRow); };
+    syncAll();
+    refreshRowTargetLabel_(newRow);
 }
 
 function removeDynamicTaskRow(rowId) {
@@ -4330,23 +4413,7 @@ function removeDynamicTaskRow(rowId) {
 }
 
 async function saveAssignedTask() {
-    const targetMode = document.getElementById("taskAssignTarget").value;
-
-    let targetStudentIds = [];
-    if (targetMode === "all") {
-        targetStudentIds = window.appData.students.map(s => s.id);
-    } else if (targetMode === "grade") {
-        const grade = document.getElementById("taskGradeSelect").value;
-        targetStudentIds = window.appData.students.filter(s => s.grade === grade).map(s => s.id);
-    } else {
-        const cbs = document.querySelectorAll(".task-st-cb:checked");
-        targetStudentIds = Array.from(cbs).map(cb => cb.value);
-    }
-
-    if (targetStudentIds.length === 0) {
-        alert("請選擇至少一位派發學生！");
-        return;
-    }
+    const topIds = topAssignStudentIds_();
 
     // 逐天檢查：日期、至少一項有名稱、日期不可重複
     const days = assignDayBlocks_();
@@ -4361,6 +4428,16 @@ async function saveAssignedTask() {
             alert(multi ? `${label}（${date} ${weekdayOf_(date)}）還沒有填寫派發項目的名稱與範圍！\n不需要這一天的話，請按該天右上角的垃圾桶移除。` : "請至少填寫一項派發項目的名稱與範圍！");
             return;
         }
+        for (let k = 0; k < rows.length; k++) {
+            const ids = rowTargetStudentIds_(rows[k].target);
+            rows[k].ids = ids === null ? topIds : ids;
+            if (!rows[k].ids.length) {
+                alert(ids === null
+                    ? `「${rows[k].title}」使用預設派發對象，但上方的預設派發對象沒有任何學生，請先選擇！`
+                    : `${multi ? label + "（" + date + "）的" : ""}「${rows[k].title}」指定的派發對象沒有任何學生，請勾選年級或學生！`);
+                return;
+            }
+        }
         plan.push({ date, rows });
     }
     const dates = plan.map(p => p.date);
@@ -4368,11 +4445,11 @@ async function saveAssignedTask() {
     if (dup.length) { alert("下列發布日期重複了，請修改後再發布：\n" + dup.map(d => `${d} ${weekdayOf_(d)}`).join("\n")); return; }
     if (multi) {
         const n = plan.reduce((s, p) => s + p.rows.length, 0);
-        if (!confirm(`確定要派發 ${plan.length} 天、共 ${n} 個項目給 ${targetStudentIds.length} 位學生嗎？\n\n` + plan.map(p => `${p.date} ${weekdayOf_(p.date)}：${p.rows.length} 項`).join("\n"))) return;
+        if (!confirm(`確定要派發 ${plan.length} 天、共 ${n} 個項目嗎？\n\n` + plan.map(p => `${p.date} ${weekdayOf_(p.date)}：${p.rows.length} 項`).join("\n"))) return;
     }
 
-    plan.forEach(({ date, rows }) => rows.forEach(({ type, subject, title }) => {
-        targetStudentIds.forEach(stId => {
+    plan.forEach(({ date, rows }) => rows.forEach(({ type, subject, title, ids }) => {
+        ids.forEach(stId => {
             window.appData.tasks.push({
                 id: "t_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5),
                 studentId: stId,
