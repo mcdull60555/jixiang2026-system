@@ -1112,24 +1112,20 @@
                     <div id="multiStudentCheckboxes" class="grid grid-cols-2 gap-2 text-xs"></div>
                 </div>
 
-                <div class="space-y-2 pt-2 border-t border-slate-100">
-                    <div class="flex justify-between items-center">
-                        <label class="text-xs font-bold text-slate-700">派發項目清單 *</label>
-                        <button type="button" onclick="addDynamicTaskRow()" class="text-xs text-indigo-600 font-bold hover:underline flex items-center">
-                            <i class="fa-solid fa-plus mr-1"></i> 新增派發項目
-                        </button>
+                <div class="space-y-3 pt-2 border-t border-slate-100">
+                    <div id="assignDays" class="space-y-3"></div>
+                    <div class="space-y-2">
+                        <div class="grid grid-cols-2 gap-2">
+                            <button type="button" onclick="addAssignDay_(true)" class="border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl px-2 py-2 text-xs"><i class="fa-solid fa-copy mr-1"></i>再加一天（複製上一天）</button>
+                            <button type="button" onclick="addAssignDay_(false)" class="border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-bold rounded-xl px-2 py-2 text-xs"><i class="fa-solid fa-calendar-plus mr-1"></i>再加一天（空白）</button>
+                        </div>
+                        <div class="text-[11px] text-slate-400 leading-relaxed">可一次派發多天的項目（最多 <span id="assignMaxDays"></span> 天），派發對象相同。新加的那天會自動排到下一個週一～週五，日期可以再改；日期在未來的項目會成為「預約派發」。</div>
                     </div>
-                    <div id="dynamicTaskRowsContainer" class="space-y-3"></div>
-                </div>
-
-                <div>
-                    <label class="block text-xs font-bold text-slate-600 mb-1">發布日期 *</label>
-                    <input type="date" id="taskDateInput" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm">
                 </div>
             </div>
             <div class="flex space-x-2 pt-2">
                 <button onclick="closeModal('assignTaskModal')" class="flex-1 bg-slate-100 text-slate-600 font-bold py-2.5 rounded-xl text-sm">取消</button>
-                <button onclick="saveAssignedTask()" class="flex-1 bg-indigo-600 text-white font-bold py-2.5 rounded-xl text-sm hover:bg-indigo-700">發布項目</button>
+                <button id="assignSaveBtn" onclick="saveAssignedTask()" class="flex-1 bg-indigo-600 text-white font-bold py-2.5 rounded-xl text-sm hover:bg-indigo-700">發布項目</button>
             </div>
         </div>
     </div>
@@ -2647,6 +2643,16 @@ function addContactBookItemRow_(text, targets, wrap) {
             ${blocks}
         </div>`;
     row.querySelector(".cb-item-input").value = text || "";
+    // Tab：跳到這一天下一個空白的項目欄位；後面都填滿了就自動新增一列（Shift+Tab 維持原本的往前）
+    row.querySelector(".cb-item-input").addEventListener("keydown", ev => {
+        if (ev.key !== "Tab" || ev.shiftKey || ev.isComposing || ev.keyCode === 229) return;
+        ev.preventDefault();
+        const inputs = [...wrap.querySelectorAll(".cb-item-input")];
+        const next = inputs.slice(inputs.indexOf(ev.target) + 1).find(i => !i.value.trim());
+        if (next) { next.focus(); return; }
+        addContactBookItemRow_("", [], wrap);
+        wrap.lastElementChild.querySelector(".cb-item-input").focus();
+    });
     row.querySelector(".cb-del").onclick = () => {
         const t = row.querySelector(".cb-item-input").value.trim();
         if (!confirm(t ? `確定要移除「${t}」這一項嗎？` : "確定要移除這一項嗎？")) return;
@@ -4154,11 +4160,85 @@ async function removeSubject(name) {
 }
 
 /* 派發任務 MODAL 邏輯 */
+/* 批次派發可一次填多天：每一天一個區塊（發布日期＋項目清單），派發對象共用 */
+const ASSIGN_MAX_DAYS = 20;
+function assignDayBlocks_() { return [...document.querySelectorAll("#assignDays .as-day")]; }
+function readAssignDayRows_(dayEl) {
+    return [...dayEl.querySelectorAll(".as-rows > div")].map(r => ({
+        type: r.querySelector(".row-type").value,
+        subject: r.querySelector(".row-subject").value,
+        title: r.querySelector(".row-title").value.trim()
+    }));
+}
+function refreshAssignDays_() {
+    const days = assignDayBlocks_();
+    const multi = days.length > 1;
+    days.forEach((el, i) => {
+        const v = el.querySelector(".as-date").value;
+        el.querySelector(".as-weekday").innerText = (v && weekdayOf_(v)) || "—";
+        el.querySelector(".as-day-no").innerText = multi ? `第 ${i + 1} 天　` : "";
+        el.querySelector(".as-day-del").classList.toggle("hidden", !multi);
+        el.classList.toggle("border", multi);
+        el.classList.toggle("p-3", multi);
+    });
+    document.getElementById("assignSaveBtn").innerText = multi ? `發布項目（共 ${days.length} 天）` : "發布項目";
+}
+// rows：[{type, subject, title}]；沒給就是一列空白
+function addAssignDayBlock_(date, rows) {
+    const wrap = document.getElementById("assignDays");
+    const day = document.createElement("div");
+    day.className = "as-day border-slate-200 rounded-xl space-y-2";
+    day.innerHTML = `<div class="flex items-end gap-2">
+            <div class="flex-1 min-w-0">
+                <label class="block text-xs font-bold text-slate-600 mb-1"><span class="as-day-no text-indigo-600"></span>發布日期 *</label>
+                <input type="date" class="as-date w-full border border-slate-300 rounded-xl px-3 py-2 text-sm">
+            </div>
+            <div class="flex-1 min-w-0">
+                <label class="block text-xs font-bold text-slate-600 mb-1">星期</label>
+                <div class="as-weekday w-full border border-slate-200 bg-slate-50 rounded-xl px-3 py-2 text-sm font-bold text-slate-600">—</div>
+            </div>
+            <button type="button" class="as-day-del hidden shrink-0 text-slate-400 hover:text-rose-500 px-2 py-2" title="移除這一天"><i class="fa-solid fa-trash-can"></i></button>
+        </div>
+        <div class="flex justify-between items-center">
+            <label class="text-xs font-bold text-slate-700">派發項目清單 *</label>
+            <button type="button" class="as-add-row text-xs text-indigo-600 font-bold hover:underline flex items-center"><i class="fa-solid fa-plus mr-1"></i> 新增派發項目</button>
+        </div>
+        <div class="as-rows space-y-3"></div>`;
+    day.querySelector(".as-date").value = date || "";
+    day.querySelector(".as-date").onchange = refreshAssignDays_;
+    const rowsWrap = day.querySelector(".as-rows");
+    day.querySelector(".as-add-row").onclick = () => addDynamicTaskRow(rowsWrap);
+    day.querySelector(".as-day-del").onclick = () => {
+        const v = day.querySelector(".as-date").value;
+        if (readAssignDayRows_(day).some(r => r.title) && !confirm(`確定要移除 ${v || "這一天"} ${v ? weekdayOf_(v) : ""} 這一天嗎？`)) return;
+        day.remove(); refreshAssignDays_();
+    };
+    wrap.appendChild(day);
+    rows = rows && rows.length ? rows : [null];
+    rows.forEach(r => addDynamicTaskRow(rowsWrap, r));
+    refreshAssignDays_();
+    return day;
+}
+// 「再加一天」：copy=true 時複製最後一天的項目（類型、科目、名稱）
+function addAssignDay_(copy) {
+    const days = assignDayBlocks_();
+    if (days.length >= ASSIGN_MAX_DAYS) { alert(`一次最多派發 ${ASSIGN_MAX_DAYS} 天。`); return; }
+    const last = days[days.length - 1];
+    const lastDate = (last && last.querySelector(".as-date").value) || localDateStr_();
+    let rows = null;
+    if (last) {
+        const prev = readAssignDayRows_(last);
+        rows = copy ? prev.filter(r => r.title) : [];
+        if (!rows.length && prev.length) rows = [{ type: prev[prev.length - 1].type, subject: prev[prev.length - 1].subject, title: "" }]; // 空白的一天沿用最後的類型與科目
+    }
+    const day = addAssignDayBlock_(nextWeekdayStr_(lastDate), rows);
+    day.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function openAssignTaskModal() {
-    initTodayDateInput();
-    const dynamicContainer = document.getElementById("dynamicTaskRowsContainer");
-    dynamicContainer.innerHTML = "";
-    addDynamicTaskRow();
+    document.getElementById("assignMaxDays").innerText = ASSIGN_MAX_DAYS;
+    document.getElementById("assignDays").innerHTML = "";
+    addAssignDayBlock_(localDateStr_());
 
     const gradeSelect = document.getElementById("taskGradeSelect");
     gradeSelect.innerHTML = (window.appData.grades || []).map(g => `<option value="${escHtml_(g)}">${escHtml_(g)}</option>`).join('');
@@ -4190,8 +4270,8 @@ function toggleMultiSelectMode() {
     multiBox.classList.toggle("hidden", target !== "multiple");
 }
 
-function addDynamicTaskRow() {
-    const container = document.getElementById("dynamicTaskRowsContainer");
+function addDynamicTaskRow(container, preset) {
+    container = container || document.querySelector("#assignDays .as-day:last-child .as-rows");
     const rowId = "task_row_" + Date.now() + "_" + Math.random().toString(36).substr(2, 4);
 
     const subjectsOptions = (window.appData.subjects || []).map(s => `<option value="${escHtml_(s)}">${escHtml_(s)}</option>`).join('');
@@ -4231,10 +4311,16 @@ function addDynamicTaskRow() {
     const newRow = container.lastElementChild;
     if (prevType) newRow.querySelector(".row-type").value = prevType;
     if (prevSubject) newRow.querySelector(".row-subject").value = prevSubject;
+    if (preset) {
+        if (preset.type) newRow.querySelector(".row-type").value = preset.type;
+        if (preset.subject && (window.appData.subjects || []).includes(preset.subject)) newRow.querySelector(".row-subject").value = preset.subject;
+        newRow.querySelector(".row-title").value = preset.title || "";
+    }
 }
 
 function removeDynamicTaskRow(rowId) {
-    const container = document.getElementById("dynamicTaskRowsContainer");
+    const container = document.getElementById(rowId)?.parentElement;
+    if (!container) return;
     if (container.children.length <= 1) {
         alert("至少需要保留一項派發項目！");
         return;
@@ -4245,7 +4331,6 @@ function removeDynamicTaskRow(rowId) {
 
 async function saveAssignedTask() {
     const targetMode = document.getElementById("taskAssignTarget").value;
-    const date = document.getElementById("taskDateInput").value;
 
     let targetStudentIds = [];
     if (targetMode === "all") {
@@ -4263,36 +4348,44 @@ async function saveAssignedTask() {
         return;
     }
 
-    const rows = document.querySelectorAll("#dynamicTaskRowsContainer > div");
-    let hasValidRow = false;
-
-    rows.forEach(row => {
-        const type = row.querySelector(".row-type").value;
-        const subject = row.querySelector(".row-subject").value;
-        const title = row.querySelector(".row-title").value.trim();
-
-        if (title) {
-            hasValidRow = true;
-            targetStudentIds.forEach(stId => {
-                window.appData.tasks.push({
-                    id: "t_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5),
-                    studentId: stId,
-                    type,
-                    subject,
-                    title,
-                    date,
-                    studentChecked: false,
-                    teacherStatus: "未完成",
-                    pendingReview: false
-                });
-            });
+    // 逐天檢查：日期、至少一項有名稱、日期不可重複
+    const days = assignDayBlocks_();
+    const multi = days.length > 1;
+    const plan = [];
+    for (let i = 0; i < days.length; i++) {
+        const date = days[i].querySelector(".as-date").value;
+        const label = multi ? `第 ${i + 1} 天` : "";
+        if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) { alert(`請選擇${label}的發布日期！`); return; }
+        const rows = readAssignDayRows_(days[i]).filter(r => r.title);
+        if (!rows.length) {
+            alert(multi ? `${label}（${date} ${weekdayOf_(date)}）還沒有填寫派發項目的名稱與範圍！\n不需要這一天的話，請按該天右上角的垃圾桶移除。` : "請至少填寫一項派發項目的名稱與範圍！");
+            return;
         }
-    });
-
-    if (!hasValidRow) {
-        alert("請至少填寫一項派發項目的名稱與範圍！");
-        return;
+        plan.push({ date, rows });
     }
+    const dates = plan.map(p => p.date);
+    const dup = [...new Set(dates.filter((d, i) => dates.indexOf(d) !== i))];
+    if (dup.length) { alert("下列發布日期重複了，請修改後再發布：\n" + dup.map(d => `${d} ${weekdayOf_(d)}`).join("\n")); return; }
+    if (multi) {
+        const n = plan.reduce((s, p) => s + p.rows.length, 0);
+        if (!confirm(`確定要派發 ${plan.length} 天、共 ${n} 個項目給 ${targetStudentIds.length} 位學生嗎？\n\n` + plan.map(p => `${p.date} ${weekdayOf_(p.date)}：${p.rows.length} 項`).join("\n"))) return;
+    }
+
+    plan.forEach(({ date, rows }) => rows.forEach(({ type, subject, title }) => {
+        targetStudentIds.forEach(stId => {
+            window.appData.tasks.push({
+                id: "t_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5),
+                studentId: stId,
+                type,
+                subject,
+                title,
+                date,
+                studentChecked: false,
+                teacherStatus: "未完成",
+                pendingReview: false
+            });
+        });
+    }));
 
     closeModal("assignTaskModal");
     await window.saveData();
