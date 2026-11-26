@@ -263,7 +263,7 @@
             </div>
 
             <!-- 控制頁籤與操作按鈕 -->
-            <div class="sticky top-14 sm:static z-20 bg-white rounded-xl border border-slate-200 p-2 sm:p-4 shadow-sm flex flex-col lg:flex-row justify-between items-center gap-2 sm:gap-3">
+            <div id="teacherNavBar" class="sticky top-14 sm:static z-20 bg-white rounded-xl border border-slate-200 p-2 sm:p-4 shadow-sm flex flex-col lg:flex-row justify-between items-center gap-2 sm:gap-3">
                 <div class="grid grid-cols-6 sm:flex sm:flex-wrap gap-1 sm:gap-2 bg-slate-100 p-1 rounded-lg w-full lg:w-auto text-xs sm:text-sm">
                     <button id="tabTasksBtn" onclick="switchTeacherTab('tasks')" class="flex-1 md:flex-none px-1 sm:px-3 py-1.5 sm:py-2 font-bold rounded-md whitespace-nowrap bg-white text-indigo-600 shadow-sm">
                         <i class="fa-solid fa-tasks block sm:inline text-base sm:text-sm sm:mr-1"></i><span class="sm:hidden text-[11px] leading-tight">審核</span><span class="hidden sm:inline">進度審核</span>
@@ -297,7 +297,7 @@
 
             <!-- 頁籤 1：作業/考卷進度總覽 -->
             <div id="teacherTasksTab" class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <div class="p-3 sm:p-4 border-b border-slate-200 bg-slate-50 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                <div id="taskFilterBar" class="p-3 sm:p-4 border-b border-slate-200 bg-slate-50 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
                     <h3 class="font-bold text-slate-800 text-sm sm:text-base flex items-center shrink-0">
                         <i class="fa-solid fa-list-check text-indigo-600 mr-2"></i> 全班進度管控與審核
                     </h3>
@@ -2047,6 +2047,7 @@ function switchTeacherTab(tabName) {
     });
 
     if (tabName === 'tasks') renderTeacherTasksTable();
+    setTimeout(updateQuickStudentBar_, 0);
     if (tabName === 'dispatch') renderDispatchManagement();
     if (tabName === 'students') renderStudentsCards();
     if (tabName === 'contactbook') renderContactBook();
@@ -2077,6 +2078,75 @@ function renderTeacherDashboard() {
     updateTeacherPendingBadge(getPendingReviewTasks(window.appData.tasks));
 }
 
+function ensureQuickStudentBar_() {
+    let bar = document.getElementById("quickStudentBar");
+    if (bar) return bar;
+    bar = document.createElement("div");
+    bar.id = "quickStudentBar";
+    bar.className = "hidden fixed bottom-3 left-1/2 -translate-x-1/2 z-40 w-[min(520px,calc(100vw-1rem))] bg-white/95 backdrop-blur border-2 border-indigo-300 rounded-full shadow-xl px-2 py-1.5 flex items-center gap-1.5";
+    bar.innerHTML = `
+        <button type="button" onclick="stepFilterStudent_(-1)" title="上一位學生" class="shrink-0 w-9 h-9 rounded-full bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold"><i class="fa-solid fa-chevron-left"></i></button>
+        <select id="quickFilterStudent" onchange="setFilterStudent_(this.value, true)" class="min-w-0 flex-1 bg-white border border-slate-300 rounded-full px-3 py-1.5 text-xs sm:text-sm font-bold text-slate-700"></select>
+        <button type="button" onclick="stepFilterStudent_(1)" title="下一位學生" class="shrink-0 w-9 h-9 rounded-full bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold"><i class="fa-solid fa-chevron-right"></i></button>
+        <button type="button" onclick="setFilterStudent_('all', true)" title="顯示所有學生" class="shrink-0 px-3 h-9 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 text-xs font-bold">全部</button>`;
+    document.body.appendChild(bar);
+    return bar;
+}
+
+function syncQuickStudentSelect_() {
+    const src = document.getElementById("filterStudent");
+    if (!src) return;
+    ensureQuickStudentBar_();
+    const dst = document.getElementById("quickFilterStudent");
+    if (!dst) return;
+    if (dst.innerHTML !== src.innerHTML) dst.innerHTML = src.innerHTML;   // 選項沒變就不重建，避免正在展開的選單被關掉
+    dst.value = src.value;
+}
+
+function scrollToTaskTable_() {
+    const tbl = document.getElementById("teacherTaskTable");
+    if (!tbl) return;
+    const hdr = document.querySelector("header");
+    const nav = document.getElementById("teacherNavBar");
+    let off = hdr ? hdr.offsetHeight : 0;
+    if (nav && getComputedStyle(nav).position === "sticky") off += nav.offsetHeight;   // 手機版頁籤列也會黏在上方
+    const y = tbl.getBoundingClientRect().top + window.scrollY - off - 8;
+    window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
+}
+
+function setFilterStudent_(val, jumpToTable) {
+    const src = document.getElementById("filterStudent");
+    if (!src) return;
+    src.value = val;
+    if (src.value !== val) src.value = "all";
+    syncQuickStudentSelect_();
+    renderTeacherTasksTable();
+    if (jumpToTable) scrollToTaskTable_();   // 換完學生直接看到他的清單開頭
+}
+
+function stepFilterStudent_(dir) {
+    const src = document.getElementById("filterStudent");
+    if (!src) return;
+    const ids = [...src.options].map(o => o.value).filter(v => v !== "all");
+    if (!ids.length) return;
+    let i = ids.indexOf(src.value);
+    if (i < 0) i = dir > 0 ? -1 : ids.length;   // 目前是「所有學生」：下一位＝第一位、上一位＝最後一位
+    i = Math.min(ids.length - 1, Math.max(0, i + dir));
+    setFilterStudent_(ids[i], true);
+}
+
+function updateQuickStudentBar_() {
+    const bar = ensureQuickStudentBar_();
+    const tab = document.getElementById("teacherTasksTab");
+    const filterBar = document.getElementById("taskFilterBar");
+    let show = false;
+    if (tab && filterBar && tab.getClientRects().length > 0 && currentRole === "teacher" && isTeacherLoggedIn) {
+        const hdr = document.querySelector("header");
+        show = filterBar.getBoundingClientRect().bottom < (hdr ? hdr.offsetHeight : 0);   // 篩選列已捲到頂端導覽列後面
+    }
+    bar.classList.toggle("hidden", !show);
+}
+
 function populateTeacherFilterDropdowns() {
     const schools = Array.from(new Set(window.appData.students.map(s => s.school).filter(Boolean)));
     const grades = window.appData.grades || [];
@@ -2101,6 +2171,7 @@ function populateTeacherFilterDropdowns() {
         stSelect.innerHTML = `<option value="all">所有學生</option>` +
             sortStudentsByGradeSchool_(window.appData.students).map(s => `<option value="${escHtml_(s.id)}">${escHtml_(studentOptionLabel_(s))}</option>`).join('');
         stSelect.value = [...stSelect.options].some(o => o.value === curSt) ? curSt : "all";
+        syncQuickStudentSelect_();
     }
 
     const rateStSelect = document.getElementById("completionRateStudentSelect");
@@ -5146,6 +5217,17 @@ function startStudentRealtimeSync() {
         }
     });
 }
+
+/* 快速換學生列：捲動、改變視窗大小、任何點擊（含登出入）之後重新判斷要不要顯示 */
+(function initQuickStudentBar_() {
+    let ticking = false;
+    const run = () => { ticking = false; updateQuickStudentBar_(); };
+    const schedule = () => { if (!ticking) { ticking = true; requestAnimationFrame(run); } };
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    document.addEventListener("click", () => setTimeout(schedule, 80), true);
+    document.getElementById("filterStudent")?.addEventListener("change", syncQuickStudentSelect_);
+})();
     </script>
 </body>
 </html>
