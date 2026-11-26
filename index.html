@@ -316,6 +316,9 @@
                         <select id="filterStudent" onchange="renderTeacherTasksTable()" class="bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-slate-700 font-bold">
                             <option value="all">所有學生</option>
                         </select>
+                        <select id="filterTaskItem" onchange="setFilterItem_(this.value)" class="bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-slate-700 font-bold max-w-[15rem]">
+                            <option value="all">所有項目名稱/範圍</option>
+                        </select>
                         <select id="filterType" onchange="renderTeacherTasksTable()" class="bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-slate-700">
                             <option value="all">類型：全部</option>
                             <option value="作業">作業</option>
@@ -2083,24 +2086,37 @@ function ensureQuickStudentBar_() {
     if (bar) return bar;
     bar = document.createElement("div");
     bar.id = "quickStudentBar";
-    bar.className = "hidden fixed bottom-3 left-1/2 -translate-x-1/2 z-40 w-[min(520px,calc(100vw-1rem))] bg-white/95 backdrop-blur border-2 border-indigo-300 rounded-full shadow-xl px-2 py-1.5 flex items-center gap-1.5";
+    bar.className = "hidden fixed bottom-3 left-1/2 -translate-x-1/2 z-40 w-[min(560px,calc(100vw-1rem))] bg-white/95 backdrop-blur border-2 border-indigo-300 rounded-3xl shadow-xl px-2 py-2 flex flex-col gap-1.5";
+    const arrow = (fn, dir, title) => `<button type="button" onclick="${fn}(${dir})" title="${title}" class="shrink-0 w-9 h-9 rounded-full bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold"><i class="fa-solid fa-chevron-${dir < 0 ? "left" : "right"}"></i></button>`;
+    const selCls = "min-w-0 flex-1 bg-white border border-slate-300 rounded-full px-3 py-1.5 text-xs sm:text-sm font-bold text-slate-700";
+    const clrCls = "shrink-0 px-3 h-9 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 text-xs font-bold";
     bar.innerHTML = `
-        <button type="button" onclick="stepFilterStudent_(-1)" title="上一位學生" class="shrink-0 w-9 h-9 rounded-full bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold"><i class="fa-solid fa-chevron-left"></i></button>
-        <select id="quickFilterStudent" onchange="setFilterStudent_(this.value, true)" class="min-w-0 flex-1 bg-white border border-slate-300 rounded-full px-3 py-1.5 text-xs sm:text-sm font-bold text-slate-700"></select>
-        <button type="button" onclick="stepFilterStudent_(1)" title="下一位學生" class="shrink-0 w-9 h-9 rounded-full bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold"><i class="fa-solid fa-chevron-right"></i></button>
-        <button type="button" onclick="setFilterStudent_('all', true)" title="顯示所有學生" class="shrink-0 px-3 h-9 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 text-xs font-bold">全部</button>`;
+        <div class="flex items-center gap-1.5">
+            <span class="shrink-0 w-10 text-center text-[11px] font-extrabold text-indigo-700">學生</span>
+            ${arrow("stepFilterStudent_", -1, "上一位學生")}
+            <select id="quickFilterStudent" onchange="setFilterStudent_(this.value, true)" class="${selCls}"></select>
+            ${arrow("stepFilterStudent_", 1, "下一位學生")}
+            <button type="button" onclick="setFilterStudent_('all', true)" title="顯示所有學生" class="${clrCls}">全部</button>
+        </div>
+        <div class="flex items-center gap-1.5">
+            <span class="shrink-0 w-10 text-center text-[11px] font-extrabold text-indigo-700">項目</span>
+            ${arrow("stepFilterItem_", -1, "上一個項目")}
+            <select id="quickFilterItem" onchange="setFilterItem_(this.value, true)" class="${selCls}"></select>
+            ${arrow("stepFilterItem_", 1, "下一個項目")}
+            <button type="button" onclick="setFilterItem_('all', true)" title="顯示所有項目" class="${clrCls}">全部</button>
+        </div>`;
     document.body.appendChild(bar);
     return bar;
 }
 
 function syncQuickStudentSelect_() {
-    const src = document.getElementById("filterStudent");
-    if (!src) return;
     ensureQuickStudentBar_();
-    const dst = document.getElementById("quickFilterStudent");
-    if (!dst) return;
-    if (dst.innerHTML !== src.innerHTML) dst.innerHTML = src.innerHTML;   // 選項沒變就不重建，避免正在展開的選單被關掉
-    dst.value = src.value;
+    [["filterStudent", "quickFilterStudent"], ["filterTaskItem", "quickFilterItem"]].forEach(([srcId, dstId]) => {
+        const src = document.getElementById(srcId), dst = document.getElementById(dstId);
+        if (!src || !dst) return;
+        if (dst.innerHTML !== src.innerHTML) dst.innerHTML = src.innerHTML;   // 選項沒變就不重建，避免正在展開的選單被關掉
+        dst.value = src.value;
+    });
 }
 
 function scrollToTaskTable_() {
@@ -2114,26 +2130,29 @@ function scrollToTaskTable_() {
     window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
 }
 
-function setFilterStudent_(val, jumpToTable) {
-    const src = document.getElementById("filterStudent");
+function setFilterSelect_(id, val, jumpToTable) {
+    const src = document.getElementById(id);
     if (!src) return;
     src.value = val;
     if (src.value !== val) src.value = "all";
     syncQuickStudentSelect_();
     renderTeacherTasksTable();
-    if (jumpToTable) scrollToTaskTable_();   // 換完學生直接看到他的清單開頭
+    if (jumpToTable) scrollToTaskTable_();   // 換完直接看到清單開頭
 }
-
-function stepFilterStudent_(dir) {
-    const src = document.getElementById("filterStudent");
+function stepFilterSelect_(id, dir) {
+    const src = document.getElementById(id);
     if (!src) return;
-    const ids = [...src.options].map(o => o.value).filter(v => v !== "all");
-    if (!ids.length) return;
-    let i = ids.indexOf(src.value);
-    if (i < 0) i = dir > 0 ? -1 : ids.length;   // 目前是「所有學生」：下一位＝第一位、上一位＝最後一位
-    i = Math.min(ids.length - 1, Math.max(0, i + dir));
-    setFilterStudent_(ids[i], true);
+    const vals = [...src.options].map(o => o.value).filter(v => v !== "all");
+    if (!vals.length) return;
+    let i = vals.indexOf(src.value);
+    if (i < 0) i = dir > 0 ? -1 : vals.length;   // 目前是「全部」：下一個＝第一個、上一個＝最後一個
+    i = Math.min(vals.length - 1, Math.max(0, i + dir));
+    setFilterSelect_(id, vals[i], true);
 }
+function setFilterStudent_(val, jumpToTable) { setFilterSelect_("filterStudent", val, jumpToTable); }
+function stepFilterStudent_(dir) { stepFilterSelect_("filterStudent", dir); }
+function setFilterItem_(val, jumpToTable) { setFilterSelect_("filterTaskItem", val, jumpToTable); }
+function stepFilterItem_(dir) { stepFilterSelect_("filterTaskItem", dir); }
 
 function updateQuickStudentBar_() {
     const bar = ensureQuickStudentBar_();
@@ -2171,8 +2190,21 @@ function populateTeacherFilterDropdowns() {
         stSelect.innerHTML = `<option value="all">所有學生</option>` +
             sortStudentsByGradeSchool_(window.appData.students).map(s => `<option value="${escHtml_(s.id)}">${escHtml_(studentOptionLabel_(s))}</option>`).join('');
         stSelect.value = [...stSelect.options].some(o => o.value === curSt) ? curSt : "all";
-        syncQuickStudentSelect_();
     }
+
+    // 項目名稱/範圍：同一次派發（類型＋科目＋名稱＋發布日期）算一個選項，新的在前
+    const itemSelect = document.getElementById("filterTaskItem");
+    if (itemSelect) {
+        const curItem = itemSelect.value;
+        const keys = uniqueDispatchKeys_(window.appData.tasks.filter(isTaskStarted_));
+        keys.sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")) ||
+            String(a.subject || "").localeCompare(String(b.subject || ""), "zh-Hant") ||
+            String(a.title || "").localeCompare(String(b.title || ""), "zh-Hant", { numeric: true }));
+        itemSelect.innerHTML = `<option value="all">所有項目名稱/範圍</option>` +
+            keys.map(k => `<option value="${escHtml_(dispatchKeyStr_(k))}">${escHtml_(`${k.date || ""} ${k.subject}｜${k.title}（${k.type}）`.trim())}</option>`).join('');
+        itemSelect.value = [...itemSelect.options].some(o => o.value === curItem) ? curItem : "all";
+    }
+    syncQuickStudentSelect_();
 
     const rateStSelect = document.getElementById("completionRateStudentSelect");
     if (rateStSelect) {
@@ -3115,6 +3147,7 @@ function renderTeacherTasksTable() {
     const schoolFilter = document.getElementById("filterTaskSchool")?.value || "all";
     const gradeFilter = document.getElementById("filterTaskGrade")?.value || "all";
     const studentFilter = document.getElementById("filterStudent")?.value || "all";
+    const itemFilter = document.getElementById("filterTaskItem")?.value || "all";
     const typeFilter = document.getElementById("filterType")?.value || "all";
     const statusFilter = document.getElementById("filterStatus")?.value || "all";
     const timeFilter = readTimeFilter_("task");
@@ -3134,6 +3167,7 @@ function renderTeacherTasksTable() {
         if (schoolFilter !== "all" && student.school !== schoolFilter) return false;
         if (gradeFilter !== "all" && student.grade !== gradeFilter) return false;
         if (studentFilter !== "all" && t.studentId !== studentFilter) return false;
+        if (itemFilter !== "all" && dispatchKeyStr_(dispatchKeyOf_(t)) !== itemFilter) return false;
         if (typeFilter !== "all" && t.type !== typeFilter) return false;
         if (statusFilter === "incomplete") {
             if (t.teacherStatus === "已完成") return false;   // 未完成/待訂正：只要還沒審核通過
@@ -5226,7 +5260,7 @@ function startStudentRealtimeSync() {
     window.addEventListener("scroll", schedule, { passive: true });
     window.addEventListener("resize", schedule);
     document.addEventListener("click", () => setTimeout(schedule, 80), true);
-    document.getElementById("filterStudent")?.addEventListener("change", syncQuickStudentSelect_);
+    ["filterStudent", "filterTaskItem"].forEach(id => document.getElementById(id)?.addEventListener("change", syncQuickStudentSelect_));
 })();
     </script>
 </body>
