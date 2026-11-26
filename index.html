@@ -2086,24 +2086,23 @@ function ensureQuickStudentBar_() {
     if (bar) return bar;
     bar = document.createElement("div");
     bar.id = "quickStudentBar";
-    bar.className = "hidden fixed bottom-3 left-1/2 -translate-x-1/2 z-40 w-[min(560px,calc(100vw-1rem))] bg-white/95 backdrop-blur border-2 border-indigo-300 rounded-3xl shadow-xl px-2 py-2 flex flex-col gap-1.5";
-    const arrow = (fn, dir, title) => `<button type="button" onclick="${fn}(${dir})" title="${title}" class="shrink-0 w-9 h-9 rounded-full bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold"><i class="fa-solid fa-chevron-${dir < 0 ? "left" : "right"}"></i></button>`;
-    const selCls = "min-w-0 flex-1 bg-white border border-slate-300 rounded-full px-3 py-1.5 text-xs sm:text-sm font-bold text-slate-700";
-    const clrCls = "shrink-0 px-3 h-9 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 text-xs font-bold";
+    bar.className = "hidden fixed bottom-3 left-1/2 -translate-x-1/2 z-40 w-[min(760px,calc(100vw-1rem))] bg-white/95 backdrop-blur border-2 border-indigo-300 rounded-full shadow-xl px-2 py-1.5 flex items-center gap-1.5";
+    const arrow = (fn, dir, title) => `<button type="button" onclick="${fn}(${dir})" title="${title}" class="shrink-0 w-8 h-8 rounded-full bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-bold"><i class="fa-solid fa-chevron-${dir < 0 ? "left" : "right"}"></i></button>`;
+    const selCls = "min-w-0 flex-1 bg-white border border-slate-300 rounded-full px-2 py-1 text-xs font-bold text-slate-700";
+    const lbl = t => `<span class="hidden sm:inline shrink-0 text-[11px] font-extrabold text-indigo-700">${t}</span>`;
     bar.innerHTML = `
-        <div class="flex items-center gap-1.5">
-            <span class="shrink-0 w-10 text-center text-[11px] font-extrabold text-indigo-700">學生</span>
-            ${arrow("stepFilterStudent_", -1, "上一位學生")}
-            <select id="quickFilterStudent" onchange="setFilterStudent_(this.value, true)" class="${selCls}"></select>
-            ${arrow("stepFilterStudent_", 1, "下一位學生")}
-            <button type="button" onclick="setFilterStudent_('all', true)" title="顯示所有學生" class="${clrCls}">全部</button>
-        </div>
-        <div class="flex items-center gap-1.5">
-            <span class="shrink-0 w-10 text-center text-[11px] font-extrabold text-indigo-700">項目</span>
+        <div class="flex items-center gap-1 flex-1 min-w-0">
+            ${lbl("項目")}
             ${arrow("stepFilterItem_", -1, "上一個項目")}
-            <select id="quickFilterItem" onchange="setFilterItem_(this.value, true)" class="${selCls}"></select>
+            <select id="quickFilterItem" title="項目名稱/範圍" onchange="setFilterItem_(this.value, true)" class="${selCls}"></select>
             ${arrow("stepFilterItem_", 1, "下一個項目")}
-            <button type="button" onclick="setFilterItem_('all', true)" title="顯示所有項目" class="${clrCls}">全部</button>
+        </div>
+        <div class="shrink-0 self-stretch w-px bg-indigo-200 mx-0.5"></div>
+        <div class="flex items-center gap-1 flex-1 min-w-0">
+            ${lbl("學生")}
+            ${arrow("stepFilterStudent_", -1, "上一位學生")}
+            <select id="quickFilterStudent" title="學生" onchange="setFilterStudent_(this.value, true)" class="${selCls}"></select>
+            ${arrow("stepFilterStudent_", 1, "下一位學生")}
         </div>`;
     document.body.appendChild(bar);
     return bar;
