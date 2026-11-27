@@ -472,14 +472,13 @@
 
                 <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-col md:flex-row justify-between items-center gap-3">
                     <div class="flex flex-wrap items-center gap-2 w-full md:w-auto text-xs">
-                        <div class="relative w-full sm:w-auto sm:flex-none min-w-[140px]">
-                            <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                            <input type="text" id="studentSearchKeyword" onkeyup="renderStudentsCards()" placeholder="搜尋姓名/學校..." class="w-full pl-8 pr-2 py-1.5 border border-slate-300 rounded-lg text-slate-700 focus:outline-none bg-white">
-                        </div>
-                        <select id="filterStudentSchool" onchange="renderStudentsCards()" class="bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-slate-700 font-bold">
+                        <select id="filterStudentPick" onchange="renderStudentsCards()" class="bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-slate-700 font-bold max-w-[14rem]">
+                            <option value="all">所有學生</option>
+                        </select>
+                        <select id="filterStudentSchool" onchange="onStudentFilterChange_()" class="bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-slate-700 font-bold">
                             <option value="all">所有學校</option>
                         </select>
-                        <select id="filterStudentGrade" onchange="renderStudentsCards()" class="bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-slate-700 font-bold">
+                        <select id="filterStudentGrade" onchange="onStudentFilterChange_()" class="bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-slate-700 font-bold">
                             <option value="all">所有年級</option>
                         </select>
                     </div>
@@ -2161,6 +2160,23 @@ function updateQuickStudentBar_() {
     bar.classList.toggle("hidden", !show);
 }
 
+// 學生管理的「選學生」下拉：只列出符合目前所選學校、年級的學生
+function populateStudentPick_() {
+    const pickSel = document.getElementById("filterStudentPick");
+    if (!pickSel) return;
+    const school = document.getElementById("filterStudentSchool")?.value || "all";
+    const grade = document.getElementById("filterStudentGrade")?.value || "all";
+    const list = window.appData.students.filter(s => (school === "all" || s.school === school) && (grade === "all" || s.grade === grade));
+    const curPick = pickSel.value;
+    pickSel.innerHTML = `<option value="all">所有學生</option>` +
+        sortStudentsByGradeSchool_(list).map(s => `<option value="${escHtml_(s.id)}">${escHtml_(studentOptionLabel_(s))}</option>`).join('');
+    pickSel.value = [...pickSel.options].some(o => o.value === curPick) ? curPick : "all";
+}
+function onStudentFilterChange_() {
+    populateStudentPick_();
+    renderStudentsCards();
+}
+
 function populateTeacherFilterDropdowns() {
     const schools = Array.from(new Set(window.appData.students.map(s => s.school).filter(Boolean)));
     const grades = window.appData.grades || [];
@@ -2178,6 +2194,8 @@ function populateTeacherFilterDropdowns() {
     fillSelect("filterTaskGrade", grades, "所有年級");
     fillSelect("filterStudentSchool", schools, "所有學校");
     fillSelect("filterStudentGrade", grades, "所有年級");
+
+    populateStudentPick_();
 
     const stSelect = document.getElementById("filterStudent");
     if (stSelect) {
@@ -3889,14 +3907,14 @@ function renderStudentsCards() {
     const container = document.getElementById("studentCardsContainer");
     if (!container) return;
 
-    const keyword = document.getElementById("studentSearchKeyword")?.value.toLowerCase().trim() || "";
+    const pickStudent = document.getElementById("filterStudentPick")?.value || "all";
     const schoolFilter = document.getElementById("filterStudentSchool")?.value || "all";
     const gradeFilter = document.getElementById("filterStudentGrade")?.value || "all";
 
     let students = window.appData.students.filter(s => {
         if (schoolFilter !== "all" && s.school !== schoolFilter) return false;
         if (gradeFilter !== "all" && s.grade !== gradeFilter) return false;
-        if (keyword && !s.name.toLowerCase().includes(keyword) && !s.school.toLowerCase().includes(keyword)) return false;
+        if (pickStudent !== "all" && s.id !== pickStudent) return false;
         return true;
     });
 
@@ -3971,14 +3989,14 @@ function toggleSelectStudent(id, checked) {
 }
 
 function toggleSelectAllStudents(checked) {
-    const keyword = document.getElementById("studentSearchKeyword")?.value.toLowerCase().trim() || "";
+    const pickStudent = document.getElementById("filterStudentPick")?.value || "all";
     const schoolFilter = document.getElementById("filterStudentSchool")?.value || "all";
     const gradeFilter = document.getElementById("filterStudentGrade")?.value || "all";
 
     window.appData.students.forEach(s => {
         if (schoolFilter !== "all" && s.school !== schoolFilter) return;
         if (gradeFilter !== "all" && s.grade !== gradeFilter) return;
-        if (keyword && !s.name.toLowerCase().includes(keyword) && !s.school.toLowerCase().includes(keyword)) return;
+        if (pickStudent !== "all" && s.id !== pickStudent) return;
 
         if (checked) selectedStudentIds.add(s.id);
         else selectedStudentIds.delete(s.id);
