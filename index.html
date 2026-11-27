@@ -303,10 +303,6 @@
                     </h3>
                     
                     <div class="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 text-xs w-full md:w-auto">
-                        <div class="relative col-span-2 sm:col-span-1 sm:flex-none min-w-[130px]">
-                            <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                            <input type="text" id="taskSearchKeyword" onkeyup="renderTeacherTasksTable()" placeholder="搜尋姓名/項目..." class="w-full pl-8 pr-2 py-1.5 border border-slate-300 rounded-lg text-slate-700 focus:outline-none">
-                        </div>
                         <select id="filterTaskSchool" onchange="renderTeacherTasksTable()" class="bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-slate-700 font-bold">
                             <option value="all">所有學校</option>
                         </select>
@@ -3142,7 +3138,6 @@ function renderTeacherTasksTable() {
     const tbody = document.getElementById("teacherTaskTableBody");
     if (!tbody) return;
 
-    const keyword = document.getElementById("taskSearchKeyword")?.value.toLowerCase().trim() || "";
     const schoolFilter = document.getElementById("filterTaskSchool")?.value || "all";
     const gradeFilter = document.getElementById("filterTaskGrade")?.value || "all";
     const studentFilter = document.getElementById("filterStudent")?.value || "all";
@@ -3172,13 +3167,6 @@ function renderTeacherTasksTable() {
             if (t.teacherStatus === "已完成") return false;   // 未完成/待訂正：只要還沒審核通過
         } else if (statusFilter !== "all" && t.teacherStatus !== statusFilter) return false;
         if (!matchesTimeFilter_(t.date, timeFilter)) return false;
-
-        if (keyword) {
-            const matchName = student.name.toLowerCase().includes(keyword);
-            const matchTitle = t.title.toLowerCase().includes(keyword);
-            const matchSubject = t.subject.toLowerCase().includes(keyword);
-            if (!matchName && !matchTitle && !matchSubject) return false;
-        }
 
         return true;
     });
